@@ -2,7 +2,7 @@ import { Archive, Check, Download, Folder, FolderOpen, Monitor, Moon, PackageOpe
 import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
-import type { AppSettings } from '../types';
+import type { AppReleaseInfo, AppSettings } from '../types';
 import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
 import type { AppUpdateInfo } from '../types';
@@ -60,8 +60,11 @@ export function SettingsPage() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [releases, setReleases] = useState<AppReleaseInfo[]>([]);
+  const [loadingReleases, setLoadingReleases] = useState(false);
   const [updateError, setUpdateError] = useState('');
   useEffect(() => setDraft(settings), [settings]);
+  useEffect(() => { void loadReleases(true); }, []);
   if (!draft) return null;
 
   async function browse(key: typeof folderFields[number]['key']) {
@@ -98,6 +101,35 @@ export function SettingsPage() {
     }
   }
 
+  async function loadReleases(silent = false) {
+    if (!silent) setLoadingReleases(true);
+    setUpdateError('');
+    try {
+      setReleases(await api.listAppReleases());
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : 'Could not load GitHub releases');
+    } finally {
+      if (!silent) setLoadingReleases(false);
+    }
+  }
+
+  async function installRelease(release: AppReleaseInfo) {
+    const current = await api.checkAppUpdates().catch(() => updateInfo);
+    const update = {
+      currentVersion: current?.currentVersion ?? 'unknown',
+      latestVersion: release.version,
+      updateAvailable: release.updateAvailable,
+      releaseName: release.name,
+      releaseNotes: release.notes,
+      releaseUrl: release.url,
+      downloadUrl: release.downloadUrl,
+      assetName: release.assetName,
+      publishedAt: release.publishedAt,
+    };
+    setUpdateInfo(update);
+    await installAppUpdate({ ...update, updateAvailable: true });
+  }
+
   async function installUpdate() {
     if (!updateInfo) return;
     setInstallingUpdate(true);
@@ -113,7 +145,7 @@ export function SettingsPage() {
   return <>
     <PageHeader eyebrow="MAKE IT YOURS" title="Settings" description="Paths, safety preferences, and how Plumbuddy handles your collection." actions={<button className="button primary" onClick={save}>{saved ? <Check size={16} /> : <Save size={16} />}{saved ? 'Saved' : 'Save changes'}</button>} />
     <section className="settings-card profile-settings"><div className="settings-heading"><span><Sparkles size={19} /></span><div><h2>Profile</h2><p>This is how Plumbuddy labels your local setup.</p></div></div><label className="profile-name-field" htmlFor="display-name"><strong>Display name</strong><input id="display-name" className="text-input" value={draft.displayName ?? ''} onChange={event => setDraft(value => value ? { ...value, displayName: event.target.value } : value)} onBlur={() => void updateSettings({ displayName: (draft.displayName || 'Player').trim() || 'Player' })} placeholder="Your name" /></label></section>
-    <section className="settings-card update-settings"><div className="settings-heading"><span><Download size={19} /></span><div><h2>App updates</h2><p>Checks GitHub Releases for a newer portable build.</p></div></div><div className="update-row"><div><strong>Portable release channel</strong><small>When you publish a new GitHub release, users can check here and download the newest EXE.</small>{updateError && <p className="form-error">{updateError}</p>}</div><button className="button primary" disabled={checkingUpdate} onClick={() => void checkUpdates()}><RefreshCw size={15} className={checkingUpdate ? 'spin' : ''} /> {checkingUpdate ? 'Checking...' : 'Check for app updates'}</button></div></section>
+    <section className="settings-card update-settings"><div className="settings-heading"><span><Download size={19} /></span><div><h2>App updates</h2><p>Checks GitHub Releases for portable builds users can install at the end of the day.</p></div></div><div className="update-row"><div><strong>Portable release channel</strong><small>When you publish a new GitHub release, users can check here and download the newest EXE.</small>{updateError && <p className="form-error">{updateError}</p>}</div><button className="button primary" disabled={checkingUpdate} onClick={() => void checkUpdates()}><RefreshCw size={15} className={checkingUpdate ? 'spin' : ''} /> {checkingUpdate ? 'Checking...' : 'Check for app updates'}</button></div><div className="release-list-head"><strong>Application versions</strong><button className="button ghost" disabled={loadingReleases} onClick={() => void loadReleases()}><RefreshCw size={14} className={loadingReleases ? 'spin' : ''} /> Refresh list</button></div><div className="release-list">{releases.length ? releases.map(release => <article key={release.url}><div><strong>{release.name}</strong><small>{release.publishedAt ? new Date(release.publishedAt).toLocaleDateString() : 'Unpublished date'} · {release.assetName ?? 'No EXE attached'}</small>{release.notes && <p>{release.notes.slice(0, 180)}</p>}</div><span className={release.updateAvailable ? 'available' : 'current'}>{release.updateAvailable ? 'Update' : 'Installed/older'}</span><button className="button ghost" onClick={() => void api.openExternal(release.url)}>Open</button>{release.downloadUrl && release.updateAvailable && <button className="button primary" onClick={() => void installRelease(release)}><Download size={14} /> Install</button>}</article>) : <div className="release-empty">{loadingReleases ? 'Loading application versions...' : 'No releases loaded yet.'}</div>}</div></section>
     <section className="settings-card"><div className="settings-heading"><span><FolderOpen size={19} /></span><div><h2>Storage locations</h2><p>Plumbuddy keeps these areas separate to protect your live game.</p></div></div><div className="folder-settings">{folderFields.map(({ key, label, detail, icon: Icon }) => <div className="folder-setting" key={key}><span className="setting-icon"><Icon size={18} /></span><div><strong>{label}</strong><small>{detail}</small><code>{draft[key]}</code></div><button onClick={() => browse(key)}>Browse</button></div>)}</div></section>
     <div className="settings-columns"><section className="settings-card"><div className="settings-heading"><span><Sparkles size={19} /></span><div><h2>Organization & safety</h2><p>Smart defaults with you in control.</p></div></div><div className="toggle-list">{toggles.map(toggle => <label key={toggle.key}><div><strong>{toggle.label}</strong><small>{toggle.text}</small></div><input type="checkbox" checked={Boolean(draft[toggle.key])} onChange={event => setDraft(value => value ? { ...value, [toggle.key]: event.target.checked } : value)} /><span className="switch" /></label>)}</div></section>
       <section className="settings-card compact-settings"><div className="settings-heading"><span><Moon size={19} /></span><div><h2>Appearance</h2><p>A comfortable view for every session.</p></div></div><div className="appearance-modes inline">{themeModes.map(mode => { const Icon = mode.icon; return <button key={mode.value} type="button" title={mode.label} aria-label={`${mode.label} theme`} aria-pressed={draft.theme === mode.value} className={draft.theme === mode.value ? 'active' : ''} onClick={() => void updateAppearance({ theme: mode.value })}><Icon size={16} /> {mode.label}</button>; })}</div><div className="swatch-section"><strong>Accent color</strong><div className="settings-swatches">{accentThemes.map(accent => <button key={accent.value} type="button" title={accent.label} aria-label={`${accent.label} accent`} aria-pressed={draft.accentTheme === accent.value} className={draft.accentTheme === accent.value ? 'active' : ''} style={{ background: accent.color }} onClick={() => void updateAppearance({ accentTheme: accent.value, accentColor: accent.color, accentX: accent.x, accentY: accent.y })} />)}</div></div><div className="swatch-section"><strong>UI color</strong><div className="ui-palette-grid">{uiPalettes.map(palette => <button key={palette.label} type="button" className={draft.uiColor?.toLowerCase() === palette.color.toLowerCase() ? 'active' : ''} onClick={() => void updateAppearance({ uiColor: palette.color, uiX: palette.x, uiY: palette.y })}><span style={{ background: palette.color }} />{palette.label}</button>)}</div></div><label className="scale-control"><span><strong>Text scale</strong><small>{Math.round((draft.textScale ?? 1) * 100)}%</small></span><input type="range" min="0.9" max="1.75" step="0.05" value={draft.textScale ?? 1} onChange={event => void updateAppearance({ textScale: Number(event.target.value) })} /></label><div className="protection-box"><ShieldCheck size={24} /><div><strong>File protection is on</strong><p>Destructive changes always require confirmation.</p></div></div><button className="reset-link" onClick={() => setDraft(value => value ? { ...value, onboardingComplete: false } : value)}><RefreshCw size={14} /> Run setup again</button></section></div>

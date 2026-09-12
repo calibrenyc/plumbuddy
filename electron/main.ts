@@ -13,7 +13,7 @@ import { cancelCollabSync, connectHostedPack, discoverHostedPacks, fetchHostedMa
 import { trashDuplicateFiles } from './duplicateCleaner.js';
 import { findEmptyFolders, removeEmptyFolders } from './emptyFolders.js';
 import { installBulkZip, prepareBulkZip, prepareBulkZipFile, prepareBulkZipFiles } from './bulkInstaller.js';
-import { checkAppUpdates, downloadAndInstallAppUpdate } from './updater.js';
+import { checkAppUpdates, downloadAndInstallAppUpdate, listAppReleases } from './updater.js';
 
 const currentDir = __dirname;
 let defaults: AppSettings;
@@ -273,6 +273,7 @@ app.whenReady().then(async () => {
     return true;
   });
   ipcMain.handle('app:check-updates', () => checkAppUpdates());
+  ipcMain.handle('app:list-releases', () => listAppReleases());
   ipcMain.handle('app:install-update', (_event, update) => downloadAndInstallAppUpdate(update));
   ipcMain.handle('audit:click', async (_event, entry: { label: string; page: string; planned: boolean; tag: string }) => {
     await appendFile(path.join(app.getPath('userData'), 'click-audit.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, 'utf8');

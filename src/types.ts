@@ -286,6 +286,17 @@ export interface AppUpdateInfo {
   publishedAt: string | null;
 }
 
+export interface AppReleaseInfo {
+  version: string;
+  name: string;
+  notes: string;
+  url: string;
+  downloadUrl: string | null;
+  assetName: string | null;
+  publishedAt: string | null;
+  updateAvailable: boolean;
+}
+
 export interface AppUpdateInstallResult {
   stagedPath: string;
   message: string;
@@ -322,6 +333,7 @@ export interface ModManagerAPI {
   navigateBrowserView(url: string): Promise<boolean>;
   commandBrowserView(command: 'back' | 'forward' | 'reload'): Promise<boolean>;
   checkAppUpdates(): Promise<AppUpdateInfo>;
+  listAppReleases(): Promise<AppReleaseInfo[]>;
   downloadAndInstallAppUpdate(update: AppUpdateInfo): Promise<AppUpdateInstallResult>;
   launchSims(): Promise<{ success: boolean; message: string }>;
   auditClick(entry: { label: string; page: string; planned: boolean; tag: string }): Promise<void>;

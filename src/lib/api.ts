@@ -81,6 +81,7 @@ const webApi: ModManagerAPI = {
       publishedAt: null,
     };
   },
+  async listAppReleases() { return []; },
   async downloadAndInstallAppUpdate(update) {
     return { stagedPath: update.downloadUrl ?? '', message: 'Demo update downloaded. Restart the desktop app to apply it.' };
   },

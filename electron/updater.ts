@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import type { AppUpdateInfo, AppUpdateInstallResult } from '../src/types.js';
+import type { AppReleaseInfo, AppUpdateInfo, AppUpdateInstallResult } from '../src/types.js';
 
 const repository = 'calibrenyc/plumbuddy';
 
@@ -62,6 +62,34 @@ export async function checkAppUpdates(): Promise<AppUpdateInfo> {
     assetName: asset?.name ?? null,
     publishedAt: release.published_at ?? null,
   };
+}
+
+function releaseToInfo(release: GitHubRelease, currentVersion: string): AppReleaseInfo {
+  const version = normalizeVersion(release.tag_name || currentVersion);
+  const asset = release.assets?.find(item => /portable.*x64.*\.exe$/i.test(item.name) || /\.exe$/i.test(item.name)) ?? null;
+  return {
+    version,
+    name: release.name || `v${version}`,
+    notes: release.body || '',
+    url: release.html_url || `https://github.com/${repository}/releases/tag/v${version}`,
+    downloadUrl: asset?.browser_download_url ?? null,
+    assetName: asset?.name ?? null,
+    publishedAt: release.published_at ?? null,
+    updateAvailable: compareVersions(currentVersion, version) < 0,
+  };
+}
+
+export async function listAppReleases(): Promise<AppReleaseInfo[]> {
+  const currentVersion = app.getVersion();
+  const response = await fetch(`https://api.github.com/repos/${repository}/releases?per_page=20`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': `Plumbuddy/${currentVersion}`,
+    },
+  });
+  if (!response.ok) throw new Error(`GitHub release list failed: ${response.status}`);
+  const releases = await response.json() as GitHubRelease[];
+  return releases.map(release => releaseToInfo(release, currentVersion));
 }
 
 function portableExecutablePath() {

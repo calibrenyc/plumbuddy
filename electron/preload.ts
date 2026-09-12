@@ -17,6 +17,7 @@ const api: ModManagerAPI = {
   navigateBrowserView: url => ipcRenderer.invoke('browser:view-navigate', url),
   commandBrowserView: command => ipcRenderer.invoke('browser:view-command', command),
   checkAppUpdates: () => ipcRenderer.invoke('app:check-updates'),
+  listAppReleases: () => ipcRenderer.invoke('app:list-releases'),
   downloadAndInstallAppUpdate: update => ipcRenderer.invoke('app:install-update', update),
   launchSims: () => ipcRenderer.invoke('game:launch'),
   auditClick: entry => ipcRenderer.invoke('audit:click', entry),
