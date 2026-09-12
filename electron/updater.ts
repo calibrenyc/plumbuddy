@@ -107,16 +107,21 @@ $current = ${powershellLiteral(currentExe)}
 $next = ${powershellLiteral(stagedPath)}
 $backup = ${powershellLiteral(backupPath)}
 $log = ${powershellLiteral(logPath)}
+Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Updater started. Current=$current Next=$next"
 Start-Sleep -Milliseconds 800
 try {
   Wait-Process -Id ${pid} -Timeout 45 -ErrorAction SilentlyContinue
 } catch {}
+Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) App process released or timed out."
 for ($i = 0; $i -lt 60; $i++) {
   try {
     if (Test-Path -LiteralPath $current) {
+      Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Moving old EXE to backup."
       Move-Item -LiteralPath $current -Destination $backup -Force
     }
+    Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Moving staged EXE into place."
     Move-Item -LiteralPath $next -Destination $current -Force
+    Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Starting updated EXE."
     Start-Process -FilePath $current -WorkingDirectory (Split-Path -Parent $current)
     if (Test-Path -LiteralPath $backup) {
       Start-Sleep -Seconds 2
@@ -125,6 +130,7 @@ for ($i = 0; $i -lt 60; $i++) {
     Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Updated Plumbuddy to ${update.latestVersion}"
     exit 0
   } catch {
+    Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Attempt $i failed: $($_.Exception.Message)"
     Start-Sleep -Seconds 1
   }
 }
@@ -134,12 +140,12 @@ exit 1
 `.trim();
   await writeFile(scriptPath, script, 'utf8');
 
-  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
+  const launcher = spawn('cmd.exe', ['/d', '/s', '/c', 'start', '""', 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
   });
-  child.unref();
-  setTimeout(() => app.quit(), 450);
+  launcher.unref();
+  setTimeout(() => app.exit(0), 650);
   return { stagedPath, message: 'Update downloaded. Plumbuddy will close, replace the old EXE, and restart.' };
 }
