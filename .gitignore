@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-electron/
+dist-portable/
+dist-portable-latest/
+.vite/
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.tsbuildinfo
+qa-*.png
+.env
+.env.*
