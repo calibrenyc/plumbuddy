@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
+import { app, BrowserView, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import path from 'node:path';
 import { watch, type FSWatcher } from 'node:fs';
 import { access, appendFile, rm, writeFile } from 'node:fs/promises';
@@ -22,6 +22,7 @@ let mainWindow: BrowserWindow | null = null;
 let modsWatcher: FSWatcher | null = null;
 let watchedModsFolder = '';
 let watchScanTimer: NodeJS.Timeout | null = null;
+let browserView: BrowserView | null = null;
 
 const blockedHosts = [
   'doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'adservice.google.com',
@@ -48,6 +49,70 @@ function configureBrowserSession() {
       mimeType: item.getMimeType(),
     });
   });
+}
+
+function ensureBrowserView() {
+  if (browserView) return browserView;
+  browserView = new BrowserView({
+    webPreferences: {
+      partition: 'persist:plumbuddy-browser',
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  browserView.webContents.setZoomFactor(1);
+  browserView.webContents.setWindowOpenHandler(details => {
+    mainWindow?.webContents.send('browser:open-tab', details.url);
+    return { action: 'deny' };
+  });
+  browserView.webContents.on('did-navigate', (_event, url) => mainWindow?.webContents.send('browser:view-state', {
+    url,
+    title: browserView?.webContents.getTitle() || url,
+    canGoBack: browserView?.webContents.navigationHistory.canGoBack() ?? false,
+    canGoForward: browserView?.webContents.navigationHistory.canGoForward() ?? false,
+  }));
+  browserView.webContents.on('did-navigate-in-page', (_event, url) => mainWindow?.webContents.send('browser:view-state', {
+    url,
+    title: browserView?.webContents.getTitle() || url,
+    canGoBack: browserView?.webContents.navigationHistory.canGoBack() ?? false,
+    canGoForward: browserView?.webContents.navigationHistory.canGoForward() ?? false,
+  }));
+  browserView.webContents.on('page-title-updated', () => {
+    const url = browserView?.webContents.getURL() || '';
+    mainWindow?.webContents.send('browser:view-state', {
+      url,
+      title: browserView?.webContents.getTitle() || url,
+      canGoBack: browserView?.webContents.navigationHistory.canGoBack() ?? false,
+      canGoForward: browserView?.webContents.navigationHistory.canGoForward() ?? false,
+    });
+  });
+  return browserView;
+}
+
+function hideBrowserView() {
+  if (browserView && mainWindow) mainWindow.removeBrowserView(browserView);
+}
+
+function clampBrowserBounds(bounds: { x: number; y: number; width: number; height: number; scaleFactor?: number }) {
+  const windowBounds = mainWindow?.getContentBounds();
+  const maxWidth = windowBounds?.width ?? 1440;
+  const maxHeight = windowBounds?.height ?? 920;
+  const scaleFactor = bounds.scaleFactor && bounds.scaleFactor > 0 ? bounds.scaleFactor : 1;
+  const scaled = {
+    x: bounds.x / scaleFactor,
+    y: bounds.y / scaleFactor,
+    width: bounds.width / scaleFactor,
+    height: bounds.height / scaleFactor,
+  };
+  const measuredBadly = scaled.width < 160 || scaled.height < 160 || scaled.x < 0 || scaled.y < 42;
+  const x = measuredBadly ? 92 : Math.round(scaled.x);
+  const y = measuredBadly ? 190 : Math.round(scaled.y);
+  const width = Math.max(120, Math.min(Math.round(scaled.width || 0), maxWidth - x));
+  const height = Math.max(120, Math.min(Math.round(scaled.height || 0), maxHeight - y));
+  const next = { x, y, width, height };
+  if (process.env.PLUMBUDDY_CLICK_AUDIT === '1') console.log('[browser-bounds]', { input: bounds, output: next, window: windowBounds });
+  return next;
 }
 
 app.on('web-contents-created', (_event, contents) => {
@@ -114,7 +179,7 @@ async function createWindow() {
   const audit = process.env.PLUMBUDDY_CLICK_AUDIT === '1';
   if (devUrl) await window.loadURL(`${devUrl}${audit ? '?audit=1' : ''}`);
   else await window.loadFile(path.join(currentDir, '../../dist/index.html'), audit ? { query: { audit: '1' } } : undefined);
-  window.webContents.setZoomFactor(1.1);
+  window.webContents.setZoomFactor(1);
 }
 
 app.whenReady().then(async () => {
@@ -165,6 +230,46 @@ app.whenReady().then(async () => {
     const url = new URL(rawUrl);
     if (url.protocol !== 'https:') throw new Error('Only secure HTTPS links can be opened');
     await shell.openExternal(url.toString());
+    return true;
+  });
+  ipcMain.handle('browser:view-show', async (_event, rawUrl: string, bounds: { x: number; y: number; width: number; height: number }) => {
+    if (!mainWindow) return false;
+    const url = new URL(rawUrl);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only web links can be opened in the browser');
+    const view = ensureBrowserView();
+    mainWindow.setBrowserView(view);
+    view.setBounds(clampBrowserBounds(bounds));
+    view.setAutoResize({ width: false, height: false });
+    if (view.webContents.getURL() !== url.toString()) {
+      await view.webContents.loadURL(url.toString()).catch(error => {
+        if ((error as NodeJS.ErrnoException).code !== 'ERR_ABORTED') throw error;
+      });
+    }
+    return true;
+  });
+  ipcMain.handle('browser:view-bounds', (_event, bounds: { x: number; y: number; width: number; height: number }) => {
+    if (!browserView) return false;
+    browserView.setBounds(clampBrowserBounds(bounds));
+    return true;
+  });
+  ipcMain.handle('browser:view-hide', () => {
+    hideBrowserView();
+    return true;
+  });
+  ipcMain.handle('browser:view-navigate', async (_event, rawUrl: string) => {
+    const view = ensureBrowserView();
+    const url = new URL(rawUrl);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only web links can be opened in the browser');
+    await view.webContents.loadURL(url.toString()).catch(error => {
+      if ((error as NodeJS.ErrnoException).code !== 'ERR_ABORTED') throw error;
+    });
+    return true;
+  });
+  ipcMain.handle('browser:view-command', (_event, command: 'back' | 'forward' | 'reload') => {
+    if (!browserView) return false;
+    if (command === 'back' && browserView.webContents.navigationHistory.canGoBack()) browserView.webContents.navigationHistory.goBack();
+    if (command === 'forward' && browserView.webContents.navigationHistory.canGoForward()) browserView.webContents.navigationHistory.goForward();
+    if (command === 'reload') browserView.webContents.reload();
     return true;
   });
   ipcMain.handle('app:check-updates', () => checkAppUpdates());

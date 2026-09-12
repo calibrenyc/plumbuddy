@@ -63,6 +63,11 @@ const webApi: ModManagerAPI = {
   async chooseZipFiles(_title, defaultPath) { return [defaultPath ?? `${getStoredSettings().downloadsFolder}\\bulk-mods.zip`]; },
   async openFolder() { return true; },
   async openExternal(url) { window.open(url, '_blank', 'noopener,noreferrer'); return true; },
+  async showBrowserView() { return false; },
+  async setBrowserViewBounds() { return false; },
+  async hideBrowserView() { return true; },
+  async navigateBrowserView() { return false; },
+  async commandBrowserView() { return false; },
   async checkAppUpdates() {
     return {
       currentVersion: '0.1.0',
@@ -86,6 +91,7 @@ const webApi: ModManagerAPI = {
   },
   onBrowserDownloadRequest() { return () => undefined; },
   onBrowserOpenTab() { return () => undefined; },
+  onBrowserViewState() { return () => undefined; },
   onHostedPackInstallProgress() { return () => undefined; },
   async downloadFromUrl(_id, url, downloadsFolder, installFolder, _options) {
     await new Promise(resolve => setTimeout(resolve, 900));

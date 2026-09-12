@@ -11,6 +11,11 @@ const api: ModManagerAPI = {
   chooseZipFiles: (title, defaultPath) => ipcRenderer.invoke('zip-files:choose', title, defaultPath),
   openFolder: path => ipcRenderer.invoke('folder:open', path),
   openExternal: url => ipcRenderer.invoke('external:open', url),
+  showBrowserView: (url, bounds) => ipcRenderer.invoke('browser:view-show', url, bounds),
+  setBrowserViewBounds: bounds => ipcRenderer.invoke('browser:view-bounds', bounds),
+  hideBrowserView: () => ipcRenderer.invoke('browser:view-hide'),
+  navigateBrowserView: url => ipcRenderer.invoke('browser:view-navigate', url),
+  commandBrowserView: command => ipcRenderer.invoke('browser:view-command', command),
   checkAppUpdates: () => ipcRenderer.invoke('app:check-updates'),
   downloadAndInstallAppUpdate: update => ipcRenderer.invoke('app:install-update', update),
   launchSims: () => ipcRenderer.invoke('game:launch'),
@@ -24,6 +29,11 @@ const api: ModManagerAPI = {
     const handler = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
     ipcRenderer.on('browser:open-tab', handler);
     return () => ipcRenderer.removeListener('browser:open-tab', handler);
+  },
+  onBrowserViewState: callback => {
+    const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => callback(state);
+    ipcRenderer.on('browser:view-state', handler);
+    return () => ipcRenderer.removeListener('browser:view-state', handler);
   },
   onHostedPackInstallProgress: callback => {
     const handler = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) => callback(progress);

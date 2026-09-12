@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, ArrowRight, Compass, Download, Edit3, ExternalLink, Folder, Home, Link2, RefreshCw, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
-import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
@@ -36,17 +35,6 @@ const starterFavorites: BrowserFavorite[] = [
   { id: 'fav-twistedmexi', label: 'TwistedMexi', url: 'https://twistedmexi.com/Mods/' },
   { id: 'fav-mccc', label: 'MCCC', url: 'https://deaderpool-mccc.com/downloads.html' },
 ];
-
-type BrowserWebView = HTMLElement & {
-  canGoBack(): boolean;
-  canGoForward(): boolean;
-  goBack(): void;
-  goForward(): void;
-  reload(): void;
-  loadURL(url: string): void;
-  getURL(): string;
-  getTitle?(): string;
-};
 
 function normalizeUrl(value: string) {
   const trimmed = value.trim();
@@ -89,7 +77,7 @@ function loadTabs(): { tabs: BrowserTab[]; activeTabId: string } {
 
 export function BrowserPage() {
   const { settings, scan, queueDownload, addActivity } = useApp();
-  const webviewRef = useRef<BrowserWebView | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const initialTabs = useMemo(loadTabs, []);
   const [tabs, setTabs] = useState<BrowserTab[]>(initialTabs.tabs);
   const [activeTabId, setActiveTabId] = useState(initialTabs.activeTabId);
@@ -121,14 +109,7 @@ export function BrowserPage() {
     if (!activeTab) return;
     setAddress(activeTab.url);
     setCurrentUrl(activeTab.url);
-    const webview = webviewRef.current;
-    setCanBack(Boolean(webview?.canGoBack?.()));
-    setCanForward(Boolean(webview?.canGoForward?.()));
-    if (embeddedBrowserEnabled && webview) {
-      const loadedUrl = webview.getURL?.();
-      if (!loadedUrl || loadedUrl !== activeTab.url) webview.loadURL(activeTab.url);
-    }
-  }, [activeTabId, activeTab?.url, embeddedBrowserEnabled]);
+  }, [activeTabId, activeTab?.url]);
 
   useEffect(() => {
     return api.onBrowserDownloadRequest(request => {
@@ -151,40 +132,49 @@ export function BrowserPage() {
     return () => window.removeEventListener('plumbuddy:browser-url', openUrl);
   }, []);
 
+  useEffect(() => api.onBrowserViewState(state => {
+    const url = state.url || currentUrl;
+    setTabs(current => current.map(item => item.id === activeTabId ? { ...item, url, title: state.title || labelFromUrl(url) } : item));
+    setCurrentUrl(url);
+    setAddress(url);
+    setCanBack(state.canGoBack);
+    setCanForward(state.canGoForward);
+  }), [activeTabId, currentUrl]);
+
   useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview || !activeTab) return;
-    const sync = () => {
-      const url = webview.getURL?.() ?? activeTab.url;
-      const title = webview.getTitle?.() || labelFromUrl(url);
-      setTabs(current => current.map(item => item.id === activeTab.id ? { ...item, url, title } : item));
-      setCurrentUrl(url);
-      setAddress(url);
-      setCanBack(Boolean(webview.canGoBack?.()));
-      setCanForward(Boolean(webview.canGoForward?.()));
+    if (!embeddedBrowserEnabled || !activeTab) {
+      void api.hideBrowserView();
+      return;
+    }
+    let disposed = false;
+    const readBounds = () => {
+      const box = viewportRef.current?.getBoundingClientRect();
+      if (!box) return null;
+      return { x: box.left, y: box.top, width: box.width, height: box.height, scaleFactor: window.devicePixelRatio || 1 };
     };
-    const popup = (event: Event) => {
-      const url = ((event as CustomEvent).detail?.url || (event as unknown as { url?: string }).url) as string | undefined;
-      if (url) {
-        event.preventDefault?.();
-        openNewTab(url, true);
-      }
+    const syncBounds = () => {
+      const bounds = readBounds();
+      if (!bounds || disposed) return;
+      void api.setBrowserViewBounds(bounds);
     };
-    const firstSync = window.setTimeout(sync, 150);
-    webview.addEventListener('did-navigate', sync);
-    webview.addEventListener('did-navigate-in-page', sync);
-    webview.addEventListener('did-finish-load', sync);
-    webview.addEventListener('page-title-updated', sync);
-    webview.addEventListener('new-window', popup);
+    const show = () => {
+      const bounds = readBounds();
+      if (!bounds || disposed) return;
+      void api.showBrowserView(activeTab.url, bounds);
+    };
+    requestAnimationFrame(show);
+    const settleTimers = [80, 250, 600, 1200].map(delay => window.setTimeout(syncBounds, delay));
+    const resizeObserver = new ResizeObserver(syncBounds);
+    if (viewportRef.current) resizeObserver.observe(viewportRef.current);
+    window.addEventListener('resize', syncBounds);
     return () => {
-      window.clearTimeout(firstSync);
-      webview.removeEventListener('did-navigate', sync);
-      webview.removeEventListener('did-navigate-in-page', sync);
-      webview.removeEventListener('did-finish-load', sync);
-      webview.removeEventListener('page-title-updated', sync);
-      webview.removeEventListener('new-window', popup);
+      disposed = true;
+      settleTimers.forEach(timer => window.clearTimeout(timer));
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', syncBounds);
+      void api.hideBrowserView();
     };
-  }, [activeTabId, activeTab?.url]);
+  }, [embeddedBrowserEnabled, activeTabId]);
 
   function openNewTab(url = homeUrl, activate = true) {
     const normalized = normalizeUrl(url);
@@ -208,7 +198,7 @@ export function BrowserPage() {
     setAddress(next);
     setCurrentUrl(next);
     if (activeTab) setTabs(current => current.map(tab => tab.id === activeTab.id ? { ...tab, url: next, title: labelFromUrl(next) } : tab));
-    if (embeddedBrowserEnabled) webviewRef.current?.loadURL(next);
+    if (embeddedBrowserEnabled) void api.navigateBrowserView(next);
   }
 
   function saveFavorites(next: BrowserFavorite[]) {
@@ -255,19 +245,18 @@ export function BrowserPage() {
   if (!settings) return null;
 
   return <>
-    <PageHeader eyebrow="BROWSE MODS" title="Browser" description="Ads are filtered, favorites stay here, and downloads use your install workflow." />
     <section className="browser-shell">
       <div className="browser-toolbar">
-        <button aria-label="Back" disabled={!canBack} onClick={() => webviewRef.current?.goBack()}><ArrowLeft size={17} /></button>
-        <button aria-label="Forward" disabled={!canForward} onClick={() => webviewRef.current?.goForward()}><ArrowRight size={17} /></button>
-        <button aria-label="Reload" onClick={() => webviewRef.current?.reload()}><RefreshCw size={17} /></button>
+        <button aria-label="Back" disabled={!canBack} onClick={() => void api.commandBrowserView('back')}><ArrowLeft size={17} /></button>
+        <button aria-label="Forward" disabled={!canForward} onClick={() => void api.commandBrowserView('forward')}><ArrowRight size={17} /></button>
+        <button aria-label="Reload" onClick={() => void api.commandBrowserView('reload')}><RefreshCw size={17} /></button>
         <button aria-label="Home" onClick={() => navigate(homeUrl)}><Home size={17} /></button>
         <form onSubmit={event => { event.preventDefault(); navigate(address); }}><Link2 size={17} /><input aria-label="Browser address" value={address} onChange={event => setAddress(event.target.value)} /></form>
         <button aria-label="Favorite current page" className={favorites.some(favorite => favorite.url.toLowerCase() === normalizeUrl(currentUrl).toLowerCase()) ? 'active' : ''} onClick={toggleFavorite}><Star size={17} /></button>
       </div>
       <div className="browser-tabs">{tabs.map(tab => <button key={tab.id} className={tab.id === activeTabId ? 'active' : ''} onClick={() => setActiveTabId(tab.id)}><span>{tab.title || labelFromUrl(tab.url)}</span>{tabs.length > 1 && <i onClick={event => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></i>}</button>)}<button className="new-tab" onClick={() => openNewTab()} aria-label="New browser tab">+</button></div>
       <div className="browser-links">{quickLinks.map(link => <button key={link.url} className={currentUrl.startsWith(link.url) ? 'active' : ''} onClick={() => navigate(link.url)}><Compass size={14} /> {link.label}</button>)}{favorites.map(favorite => <span className="browser-favorite" key={favorite.id}><button className={currentUrl.startsWith(favorite.url) ? 'active' : ''} onClick={() => navigate(favorite.url)}><Star size={14} /> {favorite.label}</button><button aria-label={`Rename ${favorite.label}`} onClick={() => openRenameFavorite(favorite)}><Edit3 size={12} /></button><button aria-label={`Remove ${favorite.label}`} onClick={() => saveFavorites(favorites.filter(item => item.id !== favorite.id))}><X size={12} /></button></span>)}</div>
-      <div className="browser-view-stack">
+      <div className="browser-view-stack" ref={viewportRef}>
         {!embeddedBrowserEnabled && <div className="browser-safe-start">
           <span><Compass size={26} /></span>
           <h2>Browser ready</h2>
@@ -277,7 +266,7 @@ export function BrowserPage() {
             <button className="button ghost" onClick={() => api.openExternal(currentUrl)}><ExternalLink size={15} /> Open outside Plumbuddy</button>
           </div>
         </div>}
-        {embeddedBrowserEnabled && activeTab && <webview ref={element => { webviewRef.current = element as BrowserWebView | null; }} className="mod-browser-view active" src={activeTab.url} partition="persist:plumbuddy-browser" allowpopups="true" />}
+        {embeddedBrowserEnabled && <div className="browser-native-placeholder"><span>Embedded browser loaded</span></div>}
       </div>
     </section>
     {pendingDownload && <Modal title="Install browser download" subtitle={pendingDownload.filename || 'A mod download was detected.'} onClose={() => setPendingDownload(null)}>

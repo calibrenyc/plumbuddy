@@ -48,7 +48,7 @@ export function App() {
   if (!settings.onboardingComplete) return <><Onboarding />{auditMode && <div className="audit-ribbon"><span /> Click audit on</div>}</>;
   const pages = { home: <HomePage onNavigate={setPage} />, discover: <DiscoverPage onNavigate={setPage} />, browser: <BrowserPage />, bulk: <BulkPage />, mods: <ModsPage />, packs: <PacksPage />, downloads: <DownloadsPage />, backups: <BackupsPage />, issues: <IssuesPage />, settings: <SettingsPage /> };
   const showBusyOverlay = Boolean(busy && /scanning|switching|updating|building/i.test(busy));
-  return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+  return <div className={`app-shell page-${page} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     <div className="window-drag" />
     <Sidebar page={page} collapsed={sidebarCollapsed} onNavigate={setPage} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} />
     <main className="content">{pages[page]}</main>

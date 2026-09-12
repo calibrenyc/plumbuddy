@@ -316,12 +316,18 @@ export interface ModManagerAPI {
   chooseZipFiles(title: string, defaultPath?: string): Promise<string[]>;
   openFolder(path: string): Promise<boolean>;
   openExternal(url: string): Promise<boolean>;
+  showBrowserView(url: string, bounds: BrowserViewBounds): Promise<boolean>;
+  setBrowserViewBounds(bounds: BrowserViewBounds): Promise<boolean>;
+  hideBrowserView(): Promise<boolean>;
+  navigateBrowserView(url: string): Promise<boolean>;
+  commandBrowserView(command: 'back' | 'forward' | 'reload'): Promise<boolean>;
   checkAppUpdates(): Promise<AppUpdateInfo>;
   downloadAndInstallAppUpdate(update: AppUpdateInfo): Promise<AppUpdateInstallResult>;
   launchSims(): Promise<{ success: boolean; message: string }>;
   auditClick(entry: { label: string; page: string; planned: boolean; tag: string }): Promise<void>;
   onBrowserDownloadRequest(callback: (request: BrowserDownloadRequest) => void): () => void;
   onBrowserOpenTab(callback: (url: string) => void): () => void;
+  onBrowserViewState(callback: (state: BrowserViewState) => void): () => void;
   onHostedPackInstallProgress(callback: (progress: HostedPackInstallProgress) => void): () => void;
   downloadFromUrl(id: string, url: string, downloadsFolder: string, installFolder: string, options?: DownloadOptions): Promise<DownloadResult>;
   prepareBulkZip(url: string, downloadsFolder: string): Promise<BulkZipPlan>;
@@ -359,6 +365,21 @@ export interface ModManagerAPI {
   syncFolderLayout(urls: string[], modsFolder: string): Promise<FolderLayoutSyncResult>;
   deleteModPack(packId: string): Promise<boolean>;
   listModPacks(): Promise<ModPackRecord[]>;
+}
+
+export interface BrowserViewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  scaleFactor?: number;
+}
+
+export interface BrowserViewState {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
 }
 
 declare global {
