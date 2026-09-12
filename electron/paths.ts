@@ -26,6 +26,7 @@ export async function detectDefaultPaths() {
     packStorage: path.join(dataRoot, 'Mod Packs'),
     backupStorage: path.join(dataRoot, 'Backups'),
     downloadsFolder: path.join(dataRoot, 'Downloads'),
+    appInstallFolder: path.join(dataRoot, 'Application'),
   };
 }
 

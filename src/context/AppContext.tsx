@@ -206,7 +206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setBusy('Downloading app update...');
     setUpdateError(null);
     try {
-      await api.downloadAndInstallAppUpdate(update);
+      await api.downloadAndInstallAppUpdate(update, settings?.appInstallFolder);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not install the update';
       setUpdateError(message);

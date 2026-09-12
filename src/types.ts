@@ -16,6 +16,7 @@ export interface AppSettings {
   packStorage: string;
   backupStorage: string;
   downloadsFolder: string;
+  appInstallFolder: string;
   activePackId?: string;
   automaticOrganization: boolean;
   highConfidenceAutoCategorization: boolean;
@@ -320,7 +321,7 @@ export interface ActivityRecord {
 export interface ModManagerAPI {
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: Partial<AppSettings>): Promise<AppSettings>;
-  detectPaths(): Promise<Pick<AppSettings, 'modsFolder' | 'packStorage' | 'backupStorage' | 'downloadsFolder'>>;
+  detectPaths(): Promise<Pick<AppSettings, 'modsFolder' | 'packStorage' | 'backupStorage' | 'downloadsFolder' | 'appInstallFolder'>>;
   chooseFolder(title: string, defaultPath?: string): Promise<string | null>;
   choosePackFile(title: string, defaultPath?: string): Promise<string | null>;
   chooseZipFile(title: string, defaultPath?: string): Promise<string | null>;
@@ -334,7 +335,7 @@ export interface ModManagerAPI {
   commandBrowserView(command: 'back' | 'forward' | 'reload'): Promise<boolean>;
   checkAppUpdates(): Promise<AppUpdateInfo>;
   listAppReleases(): Promise<AppReleaseInfo[]>;
-  downloadAndInstallAppUpdate(update: AppUpdateInfo): Promise<AppUpdateInstallResult>;
+  downloadAndInstallAppUpdate(update: AppUpdateInfo, installFolder?: string): Promise<AppUpdateInstallResult>;
   launchSims(): Promise<{ success: boolean; message: string }>;
   auditClick(entry: { label: string; page: string; planned: boolean; tag: string }): Promise<void>;
   onBrowserDownloadRequest(callback: (request: BrowserDownloadRequest) => void): () => void;

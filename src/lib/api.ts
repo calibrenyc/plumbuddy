@@ -8,6 +8,7 @@ const defaults: AppSettings = {
   packStorage: `D:\\Sims Mod Packs`,
   backupStorage: `D:\\Sims Backups`,
   downloadsFolder: `C:\\Users\\${user}\\Downloads\\Plumbuddy`,
+  appInstallFolder: `C:\\Users\\${user}\\Documents\\Plumbuddy\\Application`,
   automaticOrganization: true,
   highConfidenceAutoCategorization: false,
   backupBeforeSwitching: true,
@@ -54,8 +55,8 @@ const webApi: ModManagerAPI = {
     localStorage.setItem('plumbuddy.settings', JSON.stringify(next)); return next;
   },
   async detectPaths() {
-    const { modsFolder, packStorage, backupStorage, downloadsFolder } = defaults;
-    return { modsFolder, packStorage, backupStorage, downloadsFolder };
+    const { modsFolder, packStorage, backupStorage, downloadsFolder, appInstallFolder } = defaults;
+    return { modsFolder, packStorage, backupStorage, downloadsFolder, appInstallFolder };
   },
   async chooseFolder(_title, defaultPath) { return defaultPath ?? defaults.modsFolder; },
   async choosePackFile(_title, defaultPath) { return defaultPath ?? `${getStoredSettings().packStorage}\\Rudy-and-Whitney_RW-MP-7HX92_v2.plumbuddy-pack.json`; },
@@ -82,7 +83,7 @@ const webApi: ModManagerAPI = {
     };
   },
   async listAppReleases() { return []; },
-  async downloadAndInstallAppUpdate(update) {
+  async downloadAndInstallAppUpdate(update, _installFolder) {
     return { stagedPath: update.downloadUrl ?? '', message: 'Demo update downloaded. Restart the desktop app to apply it.' };
   },
   async launchSims() { return { success: true, message: 'The Sims 4 launch requested' }; },

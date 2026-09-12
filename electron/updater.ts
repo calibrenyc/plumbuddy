@@ -92,21 +92,21 @@ export async function listAppReleases(): Promise<AppReleaseInfo[]> {
   return releases.map(release => releaseToInfo(release, currentVersion));
 }
 
-function portableExecutablePath() {
-  return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+function portableExecutablePath(installFolder?: string) {
+  return installFolder ? path.join(path.resolve(installFolder), 'Plumbuddy.exe') : (process.env.PORTABLE_EXECUTABLE_FILE || process.execPath);
 }
 
 function powershellLiteral(value: string) {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-async function downloadUpdateAsset(update: AppUpdateInfo) {
+async function downloadUpdateAsset(update: AppUpdateInfo, installFolder?: string) {
   if (!update.downloadUrl || !update.assetName) throw new Error('This release does not have a portable EXE attached yet.');
-  const updatesRoot = path.join(app.getPath('userData'), 'updates');
+  const updatesRoot = installFolder ? path.resolve(installFolder) : path.join(app.getPath('userData'), 'updates');
   await mkdir(updatesRoot, { recursive: true });
   const fileName = path.basename(update.assetName).replace(/[<>:"/\\|?*\x00-\x1f]/g, '-');
   if (!/\.exe$/i.test(fileName)) throw new Error('The release asset is not a Windows EXE.');
-  const stagedPath = path.join(updatesRoot, `${Date.now()}-${fileName}`);
+  const stagedPath = installFolder ? path.join(updatesRoot, 'Plumbuddy.exe.next') : path.join(updatesRoot, `${Date.now()}-${fileName}`);
   const response = await fetch(update.downloadUrl, {
     redirect: 'follow',
     headers: {
@@ -119,15 +119,17 @@ async function downloadUpdateAsset(update: AppUpdateInfo) {
   return stagedPath;
 }
 
-export async function downloadAndInstallAppUpdate(update: AppUpdateInfo): Promise<AppUpdateInstallResult> {
+export async function downloadAndInstallAppUpdate(update: AppUpdateInfo, installFolder?: string): Promise<AppUpdateInstallResult> {
   if (!update.updateAvailable) throw new Error('Plumbuddy is already up to date.');
-  const currentExe = portableExecutablePath();
-  const stagedPath = await downloadUpdateAsset(update);
+  const currentExe = portableExecutablePath(installFolder);
+  const stagedPath = await downloadUpdateAsset(update, installFolder);
   await access(stagedPath);
 
-  const scriptPath = path.join(app.getPath('userData'), 'updates', `apply-update-${Date.now()}.ps1`);
+  const scriptRoot = installFolder ? path.resolve(installFolder) : path.join(app.getPath('userData'), 'updates');
+  await mkdir(scriptRoot, { recursive: true });
+  const scriptPath = path.join(scriptRoot, `apply-update-${Date.now()}.ps1`);
   const backupPath = `${currentExe}.old-${Date.now()}`;
-  const logPath = path.join(app.getPath('userData'), 'updates', 'last-update.log');
+  const logPath = path.join(scriptRoot, 'last-update.log');
   const pid = process.pid;
   const script = `
 $ErrorActionPreference = "Stop"
@@ -175,5 +177,5 @@ exit 1
   });
   launcher.unref();
   setTimeout(() => app.exit(0), 650);
-  return { stagedPath, message: 'Update downloaded. Plumbuddy will close, replace the old EXE, and restart.' };
+  return { stagedPath, message: `Update downloaded. Plumbuddy will close, install to ${path.dirname(currentExe)}, and restart.` };
 }

@@ -1,6 +1,6 @@
 {
   "name": "plumbuddy-mod-manager",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "productName": "Plumbuddy",
   "private": true,
   "description": "A safe, friendly mod manager for The Sims 4",
@@ -48,10 +48,13 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "build/icon.ico",
+      "build/icon.png",
       "package.json"
     ],
     "asar": true,
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "portable",
@@ -60,10 +63,10 @@
           ]
         }
       ],
-      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+      "artifactName": "Plumbuddy.${ext}"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+      "artifactName": "Plumbuddy.${ext}"
     }
   }
 }

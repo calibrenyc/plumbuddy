@@ -172,6 +172,7 @@ async function createWindow() {
   const window = new BrowserWindow({
     width: 1440, height: 920, minWidth: 1080, minHeight: 720,
     backgroundColor: '#f6f7f2', titleBarStyle: 'hidden', titleBarOverlay: { color: '#111712', symbolColor: '#dfe9df', height: 42 },
+    icon: path.join(currentDir, '../../build/icon.ico'),
     webPreferences: { preload: path.join(currentDir, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true },
   });
   mainWindow = window;
@@ -274,7 +275,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('app:check-updates', () => checkAppUpdates());
   ipcMain.handle('app:list-releases', () => listAppReleases());
-  ipcMain.handle('app:install-update', (_event, update) => downloadAndInstallAppUpdate(update));
+  ipcMain.handle('app:install-update', (_event, update, installFolder?: string) => downloadAndInstallAppUpdate(update, installFolder));
   ipcMain.handle('audit:click', async (_event, entry: { label: string; page: string; planned: boolean; tag: string }) => {
     await appendFile(path.join(app.getPath('userData'), 'click-audit.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, 'utf8');
   });
