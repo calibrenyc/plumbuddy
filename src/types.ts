@@ -286,6 +286,11 @@ export interface AppUpdateInfo {
   publishedAt: string | null;
 }
 
+export interface AppUpdateInstallResult {
+  stagedPath: string;
+  message: string;
+}
+
 export interface ModMoveRequest {
   filePath: string;
   relativeCategory: string;
@@ -312,6 +317,7 @@ export interface ModManagerAPI {
   openFolder(path: string): Promise<boolean>;
   openExternal(url: string): Promise<boolean>;
   checkAppUpdates(): Promise<AppUpdateInfo>;
+  downloadAndInstallAppUpdate(update: AppUpdateInfo): Promise<AppUpdateInstallResult>;
   launchSims(): Promise<{ success: boolean; message: string }>;
   auditClick(entry: { label: string; page: string; planned: boolean; tag: string }): Promise<void>;
   onBrowserDownloadRequest(callback: (request: BrowserDownloadRequest) => void): () => void;

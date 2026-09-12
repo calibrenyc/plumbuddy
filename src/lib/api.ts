@@ -76,6 +76,9 @@ const webApi: ModManagerAPI = {
       publishedAt: null,
     };
   },
+  async downloadAndInstallAppUpdate(update) {
+    return { stagedPath: update.downloadUrl ?? '', message: 'Demo update downloaded. Restart the desktop app to apply it.' };
+  },
   async launchSims() { return { success: true, message: 'The Sims 4 launch requested' }; },
   async auditClick(entry) {
     const events = JSON.parse(localStorage.getItem('plumbuddy.clickAudit') ?? '[]');

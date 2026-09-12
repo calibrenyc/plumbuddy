@@ -1,5 +1,11 @@
 import { app } from 'electron';
-import type { AppUpdateInfo } from '../src/types.js';
+import { createWriteStream } from 'node:fs';
+import { access, mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
+import type { AppUpdateInfo, AppUpdateInstallResult } from '../src/types.js';
 
 const repository = 'calibrenyc/plumbuddy';
 
@@ -56,4 +62,84 @@ export async function checkAppUpdates(): Promise<AppUpdateInfo> {
     assetName: asset?.name ?? null,
     publishedAt: release.published_at ?? null,
   };
+}
+
+function portableExecutablePath() {
+  return process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+}
+
+function powershellLiteral(value: string) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function downloadUpdateAsset(update: AppUpdateInfo) {
+  if (!update.downloadUrl || !update.assetName) throw new Error('This release does not have a portable EXE attached yet.');
+  const updatesRoot = path.join(app.getPath('userData'), 'updates');
+  await mkdir(updatesRoot, { recursive: true });
+  const fileName = path.basename(update.assetName).replace(/[<>:"/\\|?*\x00-\x1f]/g, '-');
+  if (!/\.exe$/i.test(fileName)) throw new Error('The release asset is not a Windows EXE.');
+  const stagedPath = path.join(updatesRoot, `${Date.now()}-${fileName}`);
+  const response = await fetch(update.downloadUrl, {
+    redirect: 'follow',
+    headers: {
+      Accept: 'application/octet-stream,*/*',
+      'User-Agent': `Plumbuddy/${app.getVersion()}`,
+    },
+  });
+  if (!response.ok || !response.body) throw new Error(`Could not download update: ${response.status}`);
+  await pipeline(Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>), createWriteStream(stagedPath, { flags: 'wx' }));
+  return stagedPath;
+}
+
+export async function downloadAndInstallAppUpdate(update: AppUpdateInfo): Promise<AppUpdateInstallResult> {
+  if (!update.updateAvailable) throw new Error('Plumbuddy is already up to date.');
+  const currentExe = portableExecutablePath();
+  const stagedPath = await downloadUpdateAsset(update);
+  await access(stagedPath);
+
+  const scriptPath = path.join(app.getPath('userData'), 'updates', `apply-update-${Date.now()}.ps1`);
+  const backupPath = `${currentExe}.old-${Date.now()}`;
+  const logPath = path.join(app.getPath('userData'), 'updates', 'last-update.log');
+  const pid = process.pid;
+  const script = `
+$ErrorActionPreference = "Stop"
+$current = ${powershellLiteral(currentExe)}
+$next = ${powershellLiteral(stagedPath)}
+$backup = ${powershellLiteral(backupPath)}
+$log = ${powershellLiteral(logPath)}
+Start-Sleep -Milliseconds 800
+try {
+  Wait-Process -Id ${pid} -Timeout 45 -ErrorAction SilentlyContinue
+} catch {}
+for ($i = 0; $i -lt 60; $i++) {
+  try {
+    if (Test-Path -LiteralPath $current) {
+      Move-Item -LiteralPath $current -Destination $backup -Force
+    }
+    Move-Item -LiteralPath $next -Destination $current -Force
+    Start-Process -FilePath $current -WorkingDirectory (Split-Path -Parent $current)
+    if (Test-Path -LiteralPath $backup) {
+      Start-Sleep -Seconds 2
+      Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+    }
+    Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Updated Plumbuddy to ${update.latestVersion}"
+    exit 0
+  } catch {
+    Start-Sleep -Seconds 1
+  }
+}
+Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Update failed: $($_.Exception.Message)"
+Start-Process -FilePath $next -WorkingDirectory (Split-Path -Parent $next)
+exit 1
+`.trim();
+  await writeFile(scriptPath, script, 'utf8');
+
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.unref();
+  setTimeout(() => app.quit(), 450);
+  return { stagedPath, message: 'Update downloaded. Plumbuddy will close, replace the old EXE, and restart.' };
 }

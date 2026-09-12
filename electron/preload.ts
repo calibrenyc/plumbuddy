@@ -12,6 +12,7 @@ const api: ModManagerAPI = {
   openFolder: path => ipcRenderer.invoke('folder:open', path),
   openExternal: url => ipcRenderer.invoke('external:open', url),
   checkAppUpdates: () => ipcRenderer.invoke('app:check-updates'),
+  downloadAndInstallAppUpdate: update => ipcRenderer.invoke('app:install-update', update),
   launchSims: () => ipcRenderer.invoke('game:launch'),
   auditClick: entry => ipcRenderer.invoke('audit:click', entry),
   onBrowserDownloadRequest: callback => {

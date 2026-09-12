@@ -58,6 +58,7 @@ export function SettingsPage() {
   const [draft, setDraft] = useState<AppSettings | null>(settings);
   const [saved, setSaved] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState('');
   useEffect(() => setDraft(settings), [settings]);
@@ -96,6 +97,18 @@ export function SettingsPage() {
     }
   }
 
+  async function installUpdate() {
+    if (!updateInfo) return;
+    setInstallingUpdate(true);
+    setUpdateError('');
+    try {
+      await api.downloadAndInstallAppUpdate(updateInfo);
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : 'Could not install the update');
+      setInstallingUpdate(false);
+    }
+  }
+
   return <>
     <PageHeader eyebrow="MAKE IT YOURS" title="Settings" description="Paths, safety preferences, and how Plumbuddy handles your collection." actions={<button className="button primary" onClick={save}>{saved ? <Check size={16} /> : <Save size={16} />}{saved ? 'Saved' : 'Save changes'}</button>} />
     <section className="settings-card profile-settings"><div className="settings-heading"><span><Sparkles size={19} /></span><div><h2>Profile</h2><p>This is how Plumbuddy labels your local setup.</p></div></div><label className="profile-name-field" htmlFor="display-name"><strong>Display name</strong><input id="display-name" className="text-input" value={draft.displayName ?? ''} onChange={event => setDraft(value => value ? { ...value, displayName: event.target.value } : value)} onBlur={() => void updateSettings({ displayName: (draft.displayName || 'Player').trim() || 'Player' })} placeholder="Your name" /></label></section>
@@ -108,9 +121,10 @@ export function SettingsPage() {
         <strong>{updateInfo.releaseName}</strong>
         {updateInfo.publishedAt && <small>Published {new Date(updateInfo.publishedAt).toLocaleString()}</small>}
         {updateInfo.releaseNotes && <p>{updateInfo.releaseNotes.slice(0, 900)}</p>}
-        {updateInfo.updateAvailable ? <div className="modal-note"><Download size={17} /><span>{updateInfo.assetName ? `Download ${updateInfo.assetName}, close Plumbuddy, then run the new portable.` : 'A release exists, but no portable EXE asset was attached yet.'}</span></div> : <div className="modal-note"><ShieldCheck size={17} /><span>You already have the latest published version.</span></div>}
+        {updateInfo.updateAvailable ? <div className="modal-note"><Download size={17} /><span>{updateInfo.assetName ? `Plumbuddy will download ${updateInfo.assetName}, close itself, replace the old portable EXE, and restart.` : 'A release exists, but no portable EXE asset was attached yet.'}</span></div> : <div className="modal-note"><ShieldCheck size={17} /><span>You already have the latest published version.</span></div>}
+        {updateError && <p className="form-error">{updateError}</p>}
       </div>
-      <div className="modal-actions"><button className="button ghost" onClick={() => setUpdateInfo(null)}>Close</button><button className="button subtle" onClick={() => void api.openExternal(updateInfo.releaseUrl)}>Open release</button>{updateInfo.downloadUrl && <button className="button primary" onClick={() => void api.openExternal(updateInfo.downloadUrl!)}><Download size={15} /> Download update</button>}</div>
+      <div className="modal-actions"><button className="button ghost" disabled={installingUpdate} onClick={() => setUpdateInfo(null)}>Close</button><button className="button subtle" disabled={installingUpdate} onClick={() => void api.openExternal(updateInfo.releaseUrl)}>Open release</button>{updateInfo.downloadUrl && updateInfo.updateAvailable && <button className="button primary" disabled={installingUpdate} onClick={() => void installUpdate()}><Download size={15} /> {installingUpdate ? 'Installing...' : 'Download & restart'}</button>}</div>
     </Modal>}
   </>;
 }
