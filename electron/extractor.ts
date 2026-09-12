@@ -1,13 +1,16 @@
 import { constants, createWriteStream } from 'node:fs';
-import { copyFile, lstat, mkdir, mkdtemp, rm, unlink } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readdir, rm, stat, unlink } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import yauzl, { type Entry } from 'yauzl';
+import sevenBin from '7zip-bin';
 
 const installableExtensions = new Set(['.package', '.ts4script', '.cfg']);
 const maxEntries = 20_000;
 const maxExpandedBytes = 20 * 1024 * 1024 * 1024;
+const supportedArchiveExtensions = new Set(['.zip', '.rar', '.7z']);
 
 export interface ExtractionResult {
   installedPaths: string[];
@@ -62,6 +65,74 @@ async function copyToInstall(source: string, desiredPath: string, replaceExistin
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
   }
   throw new Error('Could not create a unique mod filename');
+}
+
+async function walkInstallableFiles(root: string) {
+  const files: Array<{ absolutePath: string; relativePath: string; size: number }> = [];
+  async function walk(directory: string) {
+    const items = await readdir(directory, { withFileTypes: true });
+    for (const item of items) {
+      const absolutePath = path.join(directory, item.name);
+      if (item.isDirectory()) {
+        await walk(absolutePath);
+        continue;
+      }
+      if (!item.isFile()) continue;
+      const relativePath = path.relative(root, absolutePath);
+      safeRelativePath(relativePath);
+      const extension = path.extname(item.name).toLowerCase();
+      if (!installableExtensions.has(extension)) continue;
+      const info = await stat(absolutePath);
+      files.push({ absolutePath, relativePath, size: info.size });
+    }
+  }
+  await walk(root);
+  return files;
+}
+
+async function extractWithSevenZip(archive: string, staging: string) {
+  const sevenZipPath = sevenBin.path7za;
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(sevenZipPath, ['x', '-y', `-o${staging}`, archive], { windowsHide: true });
+    let stderr = '';
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    child.on('error', reject);
+    child.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`Archive extraction failed${stderr ? `: ${stderr.trim()}` : ''}`));
+    });
+  });
+}
+
+export async function extractArchiveAndDelete(archivePath: string, installRoot: string, downloadsRoot: string, options: { replaceExisting?: boolean } = {}): Promise<ExtractionResult> {
+  const archive = path.resolve(archivePath);
+  const extension = path.extname(archive).toLowerCase();
+  if (extension === '.zip') return extractZipAndDelete(archivePath, installRoot, downloadsRoot, options);
+  const safeDownloadsRoot = path.resolve(downloadsRoot);
+  if (!archive.startsWith(`${safeDownloadsRoot}${path.sep}`)) throw new Error('The archive is outside Plumbuddy’s download storage');
+  if (!supportedArchiveExtensions.has(extension)) throw new Error('Only ZIP, RAR, and 7Z extraction is currently supported');
+
+  const staging = await mkdtemp(path.join(os.tmpdir(), 'plumbuddy-extract-'));
+  try {
+    await extractWithSevenZip(archive, staging);
+    const files = await walkInstallableFiles(staging);
+    if (files.length > maxEntries) throw new Error('Archive contains too many entries');
+    const expandedBytes = files.reduce((total, file) => total + file.size, 0);
+    if (expandedBytes > maxExpandedBytes) throw new Error('Archive expands beyond the 20 GB safety limit');
+    if (!files.length) throw new Error('The archive does not contain any supported Sims mod files');
+
+    const installedPaths: string[] = [];
+    for (const file of files) {
+      const relativeDirectory = path.dirname(file.relativePath) === '.' ? '' : path.dirname(file.relativePath);
+      const destinationDirectory = await ensureSafeDirectory(installRoot, relativeDirectory);
+      installedPaths.push(await copyToInstall(file.absolutePath, path.join(destinationDirectory, path.basename(file.relativePath)), Boolean(options.replaceExisting)));
+    }
+    await unlink(archive);
+    return { installedPaths, skippedFiles: 0, archiveDeleted: true };
+  } finally {
+    const tempRoot = path.resolve(os.tmpdir());
+    if (staging.startsWith(`${tempRoot}${path.sep}plumbuddy-extract-`)) await rm(staging, { recursive: true, force: true });
+  }
 }
 
 export async function extractZipAndDelete(archivePath: string, installRoot: string, downloadsRoot: string, options: { replaceExisting?: boolean } = {}): Promise<ExtractionResult> {

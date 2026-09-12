@@ -142,7 +142,7 @@ export function BrowserPage() {
   }), [activeTabId, currentUrl]);
 
   useEffect(() => {
-    if (!embeddedBrowserEnabled || !activeTab) {
+    if (!embeddedBrowserEnabled || !activeTab || pendingDownload || editingFavorite) {
       void api.hideBrowserView();
       return;
     }
@@ -174,7 +174,7 @@ export function BrowserPage() {
       window.removeEventListener('resize', syncBounds);
       void api.hideBrowserView();
     };
-  }, [embeddedBrowserEnabled, activeTabId]);
+  }, [embeddedBrowserEnabled, activeTabId, pendingDownload, editingFavorite]);
 
   function openNewTab(url = homeUrl, activate = true) {
     const normalized = normalizeUrl(url);

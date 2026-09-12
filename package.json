@@ -17,6 +17,7 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "archiver": "^7.0.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

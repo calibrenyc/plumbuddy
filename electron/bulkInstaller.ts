@@ -1,17 +1,20 @@
 import { constants, createWriteStream } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, rm, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, rm, stat, unlink } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import yauzl, { type Entry } from 'yauzl';
+import sevenBin from '7zip-bin';
 import type { BulkInstallChoice, BulkInstallResult, BulkZipEntry, BulkZipPlan } from '../src/types.js';
 
 const supportedExtensions = new Set(['.package', '.ts4script', '.cfg']);
 const maxEntries = 20_000;
 const maxExpandedBytes = 20 * 1024 * 1024 * 1024;
 const maxNestedZipDepth = 3;
+const supportedArchiveExtensions = new Set(['.zip', '.rar', '.7z']);
 const plans = new Map<string, BulkZipPlan>();
 
 function fileNameFromResponse(url: URL, disposition: string | null) {
@@ -77,9 +80,42 @@ function displayArchivePath(sourceArchivePath: string | undefined, entryPath: st
   return sourceArchivePath ? `${sourceArchivePath} > ${entryPath}` : entryPath;
 }
 
+async function extractWithSevenZip(archive: string, outputFolder: string) {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(sevenBin.path7za, ['x', '-y', `-o${outputFolder}`, archive], { windowsHide: true });
+    let stderr = '';
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    child.on('error', reject);
+    child.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`Archive extraction failed${stderr ? `: ${stderr.trim()}` : ''}`));
+    });
+  });
+}
+
+async function walkExtractedFiles(root: string) {
+  const files: Array<{ absolutePath: string; relativePath: string; size: number }> = [];
+  async function walk(directory: string) {
+    const items = await readdir(directory, { withFileTypes: true });
+    for (const item of items) {
+      const absolutePath = path.join(directory, item.name);
+      if (item.isDirectory()) {
+        await walk(absolutePath);
+        continue;
+      }
+      if (!item.isFile()) continue;
+      const relativePath = safeRelativePath(path.relative(root, absolutePath));
+      const info = await stat(absolutePath);
+      files.push({ absolutePath, relativePath, size: info.size });
+    }
+  }
+  await walk(root);
+  return files;
+}
+
 async function downloadArchive(rawUrl: string, downloadsFolder: string) {
   const url = new URL(rawUrl);
-  if (!/^https?:$/.test(url.protocol)) throw new Error('Bulk install only supports HTTP and HTTPS ZIP links');
+  if (!/^https?:$/.test(url.protocol)) throw new Error('Bulk install only supports HTTP and HTTPS archive links');
   await mkdir(downloadsFolder, { recursive: true });
   let response: Response;
   try {
@@ -87,20 +123,21 @@ async function downloadArchive(rawUrl: string, downloadsFolder: string) {
       redirect: 'follow',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Plumbuddy/0.1',
-        Accept: 'application/zip,application/octet-stream,*/*',
+        Accept: 'application/zip,application/vnd.rar,application/x-rar-compressed,application/x-7z-compressed,application/octet-stream,*/*',
       },
     });
   } catch (error) {
-    throw new Error(`Could not reach the ZIP link. If this is a mod page, open it in Browser and click its download button instead. ${error instanceof Error ? error.message : ''}`.trim());
+    throw new Error(`Could not reach the archive link. If this is a mod page, open it in Browser and click its download button instead. ${error instanceof Error ? error.message : ''}`.trim());
   }
-  if (!response.ok || !response.body) throw new Error(`Could not download ZIP: server returned ${response.status}`);
+  if (!response.ok || !response.body) throw new Error(`Could not download archive: server returned ${response.status}`);
   const finalUrl = new URL(response.url);
   const fileName = fileNameFromResponse(finalUrl, response.headers.get('content-disposition'));
   const contentType = response.headers.get('content-type') ?? '';
-  if (!fileName.toLowerCase().endsWith('.zip') && !/zip|octet-stream/i.test(contentType)) {
-    throw new Error('That link did not return a ZIP file. Use a direct ZIP download link, or open the page in Browser and click download there.');
+  const extension = path.extname(fileName).toLowerCase();
+  if (!supportedArchiveExtensions.has(extension) && !/zip|rar|7z|octet-stream/i.test(contentType)) {
+    throw new Error('That link did not return a ZIP/RAR/7Z file. Use a direct archive download link, or open the page in Browser and click download there.');
   }
-  const archiveName = fileName.toLowerCase().endsWith('.zip') ? fileName : `${fileName.replace(/\.[^.]+$/, '') || 'bulk-mods'}.zip`;
+  const archiveName = supportedArchiveExtensions.has(extension) ? fileName : `${fileName.replace(/\.[^.]+$/, '') || 'bulk-mods'}.zip`;
   const archivePath = path.join(downloadsFolder, `${Date.now()}-${archiveName}`);
   const handle = createWriteStream(archivePath, { flags: 'wx' });
   await pipeline(Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>), handle);
@@ -114,15 +151,15 @@ export async function prepareBulkZip(rawUrl: string, downloadsFolder: string): P
 
 export async function prepareBulkZipFile(filePath: string): Promise<BulkZipPlan> {
   const archivePath = path.resolve(filePath);
-  if (path.extname(archivePath).toLowerCase() !== '.zip') throw new Error('Choose a ZIP archive for Bulk install');
+  if (!supportedArchiveExtensions.has(path.extname(archivePath).toLowerCase())) throw new Error('Choose a ZIP, RAR, or 7Z archive for Bulk install');
   return prepareBulkZipArchive(archivePath, path.basename(archivePath));
 }
 
 export async function prepareBulkZipFiles(filePaths: string[]): Promise<BulkZipPlan> {
-  const archives = filePaths.map(filePath => path.resolve(filePath)).filter(filePath => path.extname(filePath).toLowerCase() === '.zip');
-  if (!archives.length) throw new Error('Choose one or more ZIP archives for Bulk install');
+  const archives = filePaths.map(filePath => path.resolve(filePath)).filter(filePath => supportedArchiveExtensions.has(path.extname(filePath).toLowerCase()));
+  if (!archives.length) throw new Error('Choose one or more ZIP, RAR, or 7Z archives for Bulk install');
   const archiveInfo = archives.map(filePath => ({ path: filePath, name: path.basename(filePath) }));
-  return prepareBulkZipArchive(archiveInfo[0].path, archives.length === 1 ? archiveInfo[0].name : `${archives.length} ZIP bundles`, archiveInfo);
+  return prepareBulkZipArchive(archiveInfo[0].path, archives.length === 1 ? archiveInfo[0].name : `${archives.length} archive bundles`, archiveInfo);
 }
 
 async function prepareBulkZipArchive(archivePath: string, archiveName: string, archiveInfo = [{ path: archivePath, name: archiveName }]): Promise<BulkZipPlan> {
@@ -177,8 +214,46 @@ async function prepareBulkZipArchive(archivePath: string, archiveName: string, a
     zip.close();
   }
 
-  for (const archive of archiveInfo) await collectFromZip(archive.path, archiveInfo.length > 1 ? archive.name : undefined, 0, archive.path);
-  if (!entries.length) throw new Error('The ZIP does not contain any supported Sims mod files');
+  async function collectFromExtractedArchive(archivePath: string, sourceArchivePath: string | undefined, rootArchivePath: string) {
+    const extractRoot = await mkdtemp(path.join(os.tmpdir(), 'plumbuddy-bulk-rar-'));
+    try {
+      await extractWithSevenZip(archivePath, extractRoot);
+      const files = await walkExtractedFiles(extractRoot);
+      for (const file of files) {
+        if (entries.length + counter.skippedFiles >= maxEntries) throw new Error('Archive contains too many entries');
+        counter.expandedBytes += file.size;
+        if (counter.expandedBytes > maxExpandedBytes) throw new Error('Archive expands beyond the 20 GB safety limit');
+        const extension = path.extname(file.relativePath).toLowerCase();
+        if (!supportedExtensions.has(extension)) {
+          counter.skippedFiles += 1;
+          continue;
+        }
+        const displayPath = displayArchivePath(sourceArchivePath, file.relativePath);
+        const recommendedLocation = recommendLocation(displayPath);
+        entries.push({
+          id: randomUUID(),
+          archivePath: displayPath,
+          rootArchivePath,
+          sourceArchivePath,
+          name: path.basename(file.relativePath),
+          size: file.size,
+          recommendedLocation,
+          selectedLocation: recommendedLocation ?? 'Uncategorized',
+          needsReview: !recommendedLocation || /\b(merged|set|collection)\b/i.test(displayPath),
+        });
+      }
+    } finally {
+      const tempRoot = path.resolve(os.tmpdir());
+      if (extractRoot.startsWith(`${tempRoot}${path.sep}plumbuddy-bulk-rar-`)) await rm(extractRoot, { recursive: true, force: true });
+    }
+  }
+
+  for (const archive of archiveInfo) {
+    const extension = path.extname(archive.path).toLowerCase();
+    if (extension === '.zip') await collectFromZip(archive.path, archiveInfo.length > 1 ? archive.name : undefined, 0, archive.path);
+    else await collectFromExtractedArchive(archive.path, archiveInfo.length > 1 ? archive.name : undefined, archive.path);
+  }
+  if (!entries.length) throw new Error('The archive does not contain any supported Sims mod files');
   const plan = { id: randomUUID(), archivePath, archiveName, archives: archiveInfo, entries, skippedFiles: counter.skippedFiles };
   plans.set(plan.id, plan);
   return plan;
@@ -252,8 +327,33 @@ export async function installBulkZip(planId: string, choices: BulkInstallChoice[
       }
       zip.close();
     }
+    async function installFromExtractedArchive(archivePath: string, sourceArchivePath: string | undefined, rootArchivePath: string) {
+      const extractRoot = await mkdtemp(path.join(os.tmpdir(), 'plumbuddy-bulk-rar-install-'));
+      try {
+        await extractWithSevenZip(archivePath, extractRoot);
+        const files = await walkExtractedFiles(extractRoot);
+        for (const file of files) {
+          const displayPath = displayArchivePath(sourceArchivePath, file.relativePath);
+          const plannedEntry = plannedByArchive.get(rootArchivePath)?.get(displayPath);
+          if (!plannedEntry) continue;
+          const choice = choiceById.get(plannedEntry.id);
+          if (choice?.skip) {
+            skippedFiles += 1;
+            continue;
+          }
+          const selectedLocation = safeFolder(choice?.selectedLocation || plannedEntry.selectedLocation || 'Uncategorized');
+          await copyUnique(file.absolutePath, path.join(modsFolder, selectedLocation, path.basename(file.relativePath)));
+          installedFiles += 1;
+        }
+      } finally {
+        const tempRoot = path.resolve(os.tmpdir());
+        if (extractRoot.startsWith(`${tempRoot}${path.sep}plumbuddy-bulk-rar-install-`)) await rm(extractRoot, { recursive: true, force: true });
+      }
+    }
     for (const archive of plan.archives ?? [{ path: plan.archivePath, name: plan.archiveName }]) {
-      await installFromZip(archive.path, (plan.archives?.length ?? 1) > 1 ? archive.name : undefined, 0, archive.path);
+      const extension = path.extname(archive.path).toLowerCase();
+      if (extension === '.zip') await installFromZip(archive.path, (plan.archives?.length ?? 1) > 1 ? archive.name : undefined, 0, archive.path);
+      else await installFromExtractedArchive(archive.path, (plan.archives?.length ?? 1) > 1 ? archive.name : undefined, archive.path);
     }
     for (const archive of plan.archives ?? [{ path: plan.archivePath, name: plan.archiveName }]) await unlink(archive.path).catch(() => undefined);
     plans.delete(planId);

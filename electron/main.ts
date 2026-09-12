@@ -213,7 +213,7 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog({
       title, defaultPath,
       properties: ['openFile'],
-      filters: [{ name: 'ZIP archives', extensions: ['zip'] }],
+      filters: [{ name: 'Mod archives', extensions: ['zip', 'rar', '7z'] }],
     });
     return result.canceled ? null : result.filePaths[0];
   });
@@ -221,7 +221,7 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog({
       title, defaultPath,
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'ZIP archives', extensions: ['zip'] }],
+      filters: [{ name: 'Mod archives', extensions: ['zip', 'rar', '7z'] }],
     });
     return result.canceled ? [] : result.filePaths;
   });

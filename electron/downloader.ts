@@ -1,7 +1,7 @@
 import { access, mkdir, open, rename, rm, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { DownloadOptions, DownloadResult } from '../src/types.js';
-import { extractZipAndDelete } from './extractor.js';
+import { extractArchiveAndDelete } from './extractor.js';
 
 const allowedExtensions = new Set(['.package', '.ts4script', '.cfg', '.zip', '.rar', '.7z']);
 const directlyInstallable = new Set(['.package', '.ts4script', '.cfg']);
@@ -60,13 +60,13 @@ export async function downloadFromUrl(id: string, rawUrl: string, downloadsFolde
     if (options.replaceExisting && directlyInstallable.has(extension)) await rm(finalPath, { force: true });
     await rename(partialPath, finalPath);
     partialPath = null;
-    if (extension === '.zip') {
+    if (['.zip', '.rar', '.7z'].includes(extension)) {
       try {
-        const extracted = await extractZipAndDelete(finalPath, installFolder, downloadsFolder, options);
+        const extracted = await extractArchiveAndDelete(finalPath, installFolder, downloadsFolder, options);
         return { filePath: extracted.installedPaths[0], name: fileName, size, state: 'installed', extractedFiles: extracted.installedPaths.length, archiveDeleted: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'ZIP extraction failed';
-        throw new Error(`${message}. The ZIP was kept at ${finalPath}`);
+        const message = error instanceof Error ? error.message : 'Archive extraction failed';
+        throw new Error(`${message}. The archive was kept at ${finalPath}`);
       }
     }
     return { filePath: finalPath, name: fileName, size, state: directlyInstallable.has(extension) ? 'installed' : 'downloaded' };
