@@ -124,7 +124,11 @@ export function BrowserPage() {
     const webview = webviewRef.current;
     setCanBack(Boolean(webview?.canGoBack?.()));
     setCanForward(Boolean(webview?.canGoForward?.()));
-  }, [activeTabId, activeTab?.url]);
+    if (embeddedBrowserEnabled && webview) {
+      const loadedUrl = webview.getURL?.();
+      if (!loadedUrl || loadedUrl !== activeTab.url) webview.loadURL(activeTab.url);
+    }
+  }, [activeTabId, activeTab?.url, embeddedBrowserEnabled]);
 
   useEffect(() => {
     return api.onBrowserDownloadRequest(request => {
@@ -273,7 +277,7 @@ export function BrowserPage() {
             <button className="button ghost" onClick={() => api.openExternal(currentUrl)}><ExternalLink size={15} /> Open outside Plumbuddy</button>
           </div>
         </div>}
-        {embeddedBrowserEnabled && activeTab && <webview key={activeTab.id} ref={element => { webviewRef.current = element as BrowserWebView | null; }} className="mod-browser-view active" src={activeTab.url} partition="persist:plumbuddy-browser" allowpopups="true" />}
+        {embeddedBrowserEnabled && activeTab && <webview ref={element => { webviewRef.current = element as BrowserWebView | null; }} className="mod-browser-view active" src={activeTab.url} partition="persist:plumbuddy-browser" allowpopups="true" />}
       </div>
     </section>
     {pendingDownload && <Modal title="Install browser download" subtitle={pendingDownload.filename || 'A mod download was detected.'} onClose={() => setPendingDownload(null)}>
