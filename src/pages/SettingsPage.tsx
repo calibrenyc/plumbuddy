@@ -54,7 +54,7 @@ const uiPalettes = [
 ];
 
 export function SettingsPage() {
-  const { settings, updateSettings, addActivity } = useApp();
+  const { settings, updateSettings, addActivity, checkAppUpdate, installAppUpdate } = useApp();
   const [draft, setDraft] = useState<AppSettings | null>(settings);
   const [saved, setSaved] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -88,6 +88,7 @@ export function SettingsPage() {
     setUpdateError('');
     try {
       const info = await api.checkAppUpdates();
+      await checkAppUpdate(true);
       setUpdateInfo(info);
       await addActivity({ type: 'settings', title: info.updateAvailable ? 'App update found' : 'App is up to date', detail: info.updateAvailable ? `${info.currentVersion} -> ${info.latestVersion}` : `Running ${info.currentVersion}` });
     } catch (error) {
@@ -102,7 +103,7 @@ export function SettingsPage() {
     setInstallingUpdate(true);
     setUpdateError('');
     try {
-      await api.downloadAndInstallAppUpdate(updateInfo);
+      await installAppUpdate(updateInfo);
     } catch (error) {
       setUpdateError(error instanceof Error ? error.message : 'Could not install the update');
       setInstallingUpdate(false);

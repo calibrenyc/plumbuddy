@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, demoScan } from '../lib/api';
-import type { ActivityRecord, AppSettings, BackupRecord, DownloadRecord, ModPackRecord, ScanResult } from '../types';
+import type { ActivityRecord, AppSettings, AppUpdateInfo, BackupRecord, DownloadRecord, ModPackRecord, ScanResult } from '../types';
 
 interface AppContextValue {
   settings: AppSettings | null;
@@ -9,6 +9,8 @@ interface AppContextValue {
   packs: ModPackRecord[];
   downloads: DownloadRecord[];
   activities: ActivityRecord[];
+  appUpdate: AppUpdateInfo | null;
+  updateError: string | null;
   busy: string | null;
   toast: string | null;
   updateSettings(update: Partial<AppSettings>): Promise<void>;
@@ -24,6 +26,8 @@ interface AppContextValue {
   retryDownload(id: string): Promise<void>;
   clearFinishedDownloads(): void;
   addActivity(activity: Omit<ActivityRecord, 'id' | 'createdAt'>): Promise<void>;
+  checkAppUpdate(silent?: boolean): Promise<AppUpdateInfo | null>;
+  installAppUpdate(update?: AppUpdateInfo): Promise<void>;
   clearToast(): void;
 }
 
@@ -66,6 +70,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     catch { return []; }
   });
   const [activities, setActivities] = useState<ActivityRecord[]>([]);
+  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -82,6 +88,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     });
   }, []);
+  useEffect(() => {
+    if (!settings || !window.modManager) return;
+    const timer = window.setTimeout(() => {
+      void checkAppUpdate(true);
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [settings?.onboardingComplete]);
   useEffect(() => { localStorage.setItem('plumbuddy.downloads', JSON.stringify(downloads)); }, [downloads]);
   useEffect(() => {
     if (!settings || !window.modManager) return;
@@ -164,6 +177,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function addActivity(activity: Omit<ActivityRecord, 'id' | 'createdAt'>) {
     const record = await api.addActivity(activity);
     setActivities(current => [record, ...current].slice(0, 100));
+  }
+  async function checkAppUpdate(silent = false) {
+    if (!silent) setBusy('Checking for app updates...');
+    setUpdateError(null);
+    try {
+      const info = await api.checkAppUpdates();
+      setAppUpdate(info);
+      if (info.updateAvailable) {
+        setToast(`Plumbuddy ${info.latestVersion} is available`);
+        await addActivity({ type: 'settings', title: 'App update found', detail: `${info.currentVersion} -> ${info.latestVersion}` });
+      } else if (!silent) {
+        setToast(`Plumbuddy ${info.currentVersion} is up to date`);
+        await addActivity({ type: 'settings', title: 'App is up to date', detail: `Running ${info.currentVersion}` });
+      }
+      return info;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not check for app updates';
+      setUpdateError(message);
+      if (!silent) setToast(message);
+      return null;
+    } finally {
+      if (!silent) setBusy(null);
+    }
+  }
+  async function installAppUpdate(update = appUpdate ?? undefined) {
+    if (!update) return;
+    setBusy('Downloading app update...');
+    setUpdateError(null);
+    try {
+      await api.downloadAndInstallAppUpdate(update);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not install the update';
+      setUpdateError(message);
+      setToast(message);
+      setBusy(null);
+    }
   }
   async function runScan() {
     if (!settings) return;
@@ -287,7 +336,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDownloads(current => current.filter(item => item.state === 'downloading'));
   }
 
-  const value = useMemo(() => ({ settings, scan, backups, packs, downloads, activities, busy, toast, updateSettings, runScan, runBackup, createPack, updatePack, refreshPacks, switchPack, launchGame, queueDownload, cancelDownload, retryDownload, clearFinishedDownloads, addActivity, clearToast: () => setToast(null) }), [settings, scan, backups, packs, downloads, activities, busy, toast]);
+  const value = useMemo(() => ({ settings, scan, backups, packs, downloads, activities, appUpdate, updateError, busy, toast, updateSettings, runScan, runBackup, createPack, updatePack, refreshPacks, switchPack, launchGame, queueDownload, cancelDownload, retryDownload, clearFinishedDownloads, addActivity, checkAppUpdate, installAppUpdate, clearToast: () => setToast(null) }), [settings, scan, backups, packs, downloads, activities, appUpdate, updateError, busy, toast]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
