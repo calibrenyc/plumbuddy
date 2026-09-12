@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, Compass, Download, Edit3, Folder, Home, Link2, RefreshCw, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Compass, Download, Edit3, ExternalLink, Folder, Home, Link2, RefreshCw, ShieldCheck, Sparkles, Star, X } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
 import { useApp } from '../context/AppContext';
@@ -102,6 +102,7 @@ export function BrowserPage() {
   const [favorites, setFavorites] = useState<BrowserFavorite[]>(loadFavorites);
   const [editingFavorite, setEditingFavorite] = useState<BrowserFavorite | null>(null);
   const [favoriteLabel, setFavoriteLabel] = useState('');
+  const [embeddedBrowserEnabled, setEmbeddedBrowserEnabled] = useState(false);
   const [location, setLocation] = useState('Uncategorized');
   const [customPath, setCustomPath] = useState<string | null>(null);
   const recommended = useMemo(() => recommendLocation(`${pendingDownload?.filename ?? ''} ${pendingDownload?.url ?? ''}`), [pendingDownload]);
@@ -203,7 +204,7 @@ export function BrowserPage() {
     setAddress(next);
     setCurrentUrl(next);
     if (activeTab) setTabs(current => current.map(tab => tab.id === activeTab.id ? { ...tab, url: next, title: labelFromUrl(next) } : tab));
-    webviewRef.current?.loadURL(next);
+    if (embeddedBrowserEnabled) webviewRef.current?.loadURL(next);
   }
 
   function saveFavorites(next: BrowserFavorite[]) {
@@ -262,7 +263,18 @@ export function BrowserPage() {
       </div>
       <div className="browser-tabs">{tabs.map(tab => <button key={tab.id} className={tab.id === activeTabId ? 'active' : ''} onClick={() => setActiveTabId(tab.id)}><span>{tab.title || labelFromUrl(tab.url)}</span>{tabs.length > 1 && <i onClick={event => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></i>}</button>)}<button className="new-tab" onClick={() => openNewTab()} aria-label="New browser tab">+</button></div>
       <div className="browser-links">{quickLinks.map(link => <button key={link.url} className={currentUrl.startsWith(link.url) ? 'active' : ''} onClick={() => navigate(link.url)}><Compass size={14} /> {link.label}</button>)}{favorites.map(favorite => <span className="browser-favorite" key={favorite.id}><button className={currentUrl.startsWith(favorite.url) ? 'active' : ''} onClick={() => navigate(favorite.url)}><Star size={14} /> {favorite.label}</button><button aria-label={`Rename ${favorite.label}`} onClick={() => openRenameFavorite(favorite)}><Edit3 size={12} /></button><button aria-label={`Remove ${favorite.label}`} onClick={() => saveFavorites(favorites.filter(item => item.id !== favorite.id))}><X size={12} /></button></span>)}</div>
-      <div className="browser-view-stack">{activeTab && <webview key={activeTab.id} ref={element => { webviewRef.current = element as BrowserWebView | null; }} className="mod-browser-view active" src={activeTab.url} partition="persist:plumbuddy-browser" allowpopups="true" />}</div>
+      <div className="browser-view-stack">
+        {!embeddedBrowserEnabled && <div className="browser-safe-start">
+          <span><Compass size={26} /></span>
+          <h2>Browser ready</h2>
+          <p>The embedded browser is paused so it cannot blank the app. Open it here when you are ready, or launch the current site externally.</p>
+          <div>
+            <button className="button primary" onClick={() => setEmbeddedBrowserEnabled(true)}>Open embedded browser</button>
+            <button className="button ghost" onClick={() => api.openExternal(currentUrl)}><ExternalLink size={15} /> Open outside Plumbuddy</button>
+          </div>
+        </div>}
+        {embeddedBrowserEnabled && activeTab && <webview key={activeTab.id} ref={element => { webviewRef.current = element as BrowserWebView | null; }} className="mod-browser-view active" src={activeTab.url} partition="persist:plumbuddy-browser" allowpopups="true" />}
+      </div>
     </section>
     {pendingDownload && <Modal title="Install browser download" subtitle={pendingDownload.filename || 'A mod download was detected.'} onClose={() => setPendingDownload(null)}>
       <div className="recommended-box"><span><Sparkles size={15} /> RECOMMENDED</span><strong>{categoryLabel(recommended)}</strong><p>Based on the filename and download link.</p></div>
