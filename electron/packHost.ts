@@ -318,9 +318,19 @@ export async function fetchHostedManifest(rawUrl: string): Promise<ModPackManife
   const base = new URL(normalizeHostUrl(rawUrl));
   if (!['http:', 'https:'].includes(base.protocol)) throw new Error('Pack connections must use an HTTP URL from the host');
   const manifestUrl = base.pathname.endsWith('/manifest') ? base : new URL(`${base.pathname.replace(/\/$/, '')}/manifest`, base);
-  const response = await fetch(manifestUrl);
+  let response: Response;
+  try {
+    response = await fetch(manifestUrl);
+  } catch (error) {
+    const detail = error instanceof Error && error.message !== 'fetch failed' ? `: ${error.message}` : '';
+    throw new Error(`Could not reach collab peer ${base.host}${detail}`);
+  }
   if (!response.ok) throw new Error(`The host returned ${response.status}`);
-  return response.json() as Promise<ModPackManifest>;
+  try {
+    return await response.json() as ModPackManifest;
+  } catch {
+    throw new Error(`The collab peer ${base.host} returned an invalid pack manifest`);
+  }
 }
 
 export async function connectHostedPack(rawUrl: string, scan: ScanResult): Promise<PackComparisonResult> {
@@ -494,7 +504,18 @@ export async function syncCollabPacks(rawUrls: string[], modsFolder: string, sca
     const urls = [...new Set(rawUrls.map(normalizeHostUrl))];
     if (!urls.length) throw new Error('No collab peers are available to sync');
     progress({ phase: 'preparing', message: `Checking ${urls.length} collab peer${urls.length === 1 ? '' : 's'}...` });
-    const peers = await Promise.all(urls.map(async rawUrl => ({ rawUrl, base: new URL(rawUrl), manifest: await fetchHostedManifest(rawUrl) })));
+    const peerResults = await Promise.allSettled(urls.map(async rawUrl => ({ rawUrl, base: new URL(rawUrl), manifest: await fetchHostedManifest(rawUrl) })));
+    const peers = peerResults.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+    const failedPeers = peerResults.flatMap((result, index) => result.status === 'rejected' ? [{ url: urls[index], reason: result.reason instanceof Error ? result.reason.message : 'unknown error' }] : []);
+    for (const failed of failedPeers) {
+      progress({ phase: 'failed', message: `Skipped unavailable collab peer ${failed.url}: ${failed.reason}` });
+    }
+    if (!peers.length) {
+      throw new Error(`Could not reach any of the ${urls.length} collab peers. Check that the other computers are still hosting and on the same network.`);
+    }
+    if (failedPeers.length) {
+      progress({ phase: 'preparing', message: `Continuing with ${peers.length} reachable peer${peers.length === 1 ? '' : 's'}; skipped ${failedPeers.length}.` });
+    }
     const packName = peers[0]?.manifest.name ?? 'Collab pack';
     const files = new Map<string, { rawUrl: string; base: URL; file: ModPackManifest['files'][number] }>();
     for (const peer of peers) {
