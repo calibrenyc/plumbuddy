@@ -184,6 +184,8 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Keep the legacy data directory so Balance upgrades preserve Plumbuddy settings and packs.
+  app.setName('Plumbuddy');
   initializeDatabase();
   configureBrowserSession();
   if (process.env.PLUMBUDDY_CLICK_AUDIT === '1') {
