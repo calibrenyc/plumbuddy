@@ -33,6 +33,7 @@ export interface AppSettings {
   uiX: number;
   uiY: number;
   textScale: number;
+  ignoredUncategorizedLocations: string[];
 }
 
 export interface ModFile {
@@ -50,6 +51,7 @@ export interface ModFile {
   enabled: boolean;
   duplicate: boolean;
   depthIssue: boolean;
+  ignoredLocation?: boolean;
 }
 
 export interface ScanResult {

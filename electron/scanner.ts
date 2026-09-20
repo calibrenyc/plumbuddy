@@ -149,7 +149,7 @@ function scanCacheKey(filePath: string) {
   return path.resolve(filePath).toLowerCase();
 }
 
-export async function scanMods(root: string, previous?: ScanResult | null): Promise<ScanResult> {
+export async function scanMods(root: string, previous?: ScanResult | null, ignoredLocations: string[] = []): Promise<ScanResult> {
   const absoluteRoot = path.resolve(root);
   const files: ModFile[] = [];
   const previousByPath = new Map((previous?.files ?? []).map(file => [scanCacheKey(file.path), file]));
@@ -169,6 +169,8 @@ export async function scanMods(root: string, previous?: ScanResult | null): Prom
         const folderDepth = relativePath.split(path.sep).length - 1;
         const recommendedLocation = recommendLocation(relativePath, extension);
         const fallbackCategory = categorize(relativePath, extension);
+        const currentFolder = path.dirname(relativePath).replace(/\//g, '\\').toLowerCase();
+        const ignoredLocation = fallbackCategory === 'Uncategorized' && ignoredLocations.some(location => location.toLowerCase() === currentFolder);
         const modifiedAt = info.mtime.toISOString();
         const previousFile = previousByPath.get(scanCacheKey(fullPath)) ?? previousByRelativePath.get(relativePath.toLowerCase());
         const hash = previousFile && previousFile.size === info.size && previousFile.modifiedAt === modifiedAt ? previousFile.hash : '';
@@ -180,6 +182,7 @@ export async function scanMods(root: string, previous?: ScanResult | null): Prom
           categoryMismatch: Boolean(recommendedLocation && !isInRecommendedFolder(relativePath, recommendedLocation, extension)),
           enabled: true, duplicate: false,
           depthIssue: extension === '.ts4script' && folderDepth > 1,
+          ignoredLocation,
         };
         files.push(file);
         if (!hash) pendingHashes.push({ file, fullPath });
@@ -206,7 +209,7 @@ export async function scanMods(root: string, previous?: ScanResult | null): Prom
     files, totalSize: files.reduce((sum, file) => sum + file.size, 0),
     duplicateGroups: duplicateGroups.length,
     depthIssues: files.filter(file => file.depthIssue).length,
-    uncategorized: files.filter(file => file.category === 'Uncategorized').length,
+    uncategorized: files.filter(file => file.category === 'Uncategorized' && !file.ignoredLocation).length,
     scannedAt: new Date().toISOString(),
   };
 }

@@ -51,7 +51,7 @@ export function App() {
   return <div className={`app-shell page-${page} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     <div className="window-drag" />
     <Sidebar page={page} collapsed={sidebarCollapsed} onNavigate={setPage} onToggleCollapsed={() => setSidebarCollapsed(value => !value)} />
-    <main className="content">{pages[page]}</main>
+    <main key={page} className="content">{pages[page]}</main>
     {auditMode && <div className="audit-ribbon"><span /> Click audit on · controls are being recorded</div>}
     {showBusyOverlay && <div className="busy-overlay" role="status" aria-live="polite">
       <div className="busy-plumbob"><span /></div>

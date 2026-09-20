@@ -13,9 +13,9 @@ if ([string]::IsNullOrWhiteSpace($Tag)) {
 
 npm run build:portable
 
-$artifact = Join-Path $projectRoot "dist-portable\Plumbuddy-$($package.version)-portable-x64.exe"
+$artifact = Join-Path $projectRoot "dist-portable\Balance-$($package.version)-portable-x64.exe"
 if (!(Test-Path -LiteralPath $artifact)) {
   throw "Portable artifact was not found: $artifact"
 }
 
-gh release create $Tag $artifact --title "Plumbuddy $Tag" --notes "Portable Plumbuddy release $Tag"
+gh release create $Tag $artifact --title "Balance $Tag" --notes "Portable Balance release $Tag"

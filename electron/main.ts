@@ -131,7 +131,7 @@ function scanBelongsToFolder(scan: ScanResult | null, folderPath: string) {
 
 async function runCachedScan(folderPath: string) {
   const previous = scanBelongsToFolder(lastScan, folderPath) ? lastScan : getLastScan(folderPath);
-  lastScan = await scanMods(folderPath, previous);
+  lastScan = await scanMods(folderPath, previous, getSettings(defaults).ignoredUncategorizedLocations);
   saveScan(lastScan, folderPath);
   return lastScan;
 }
@@ -191,7 +191,7 @@ app.whenReady().then(async () => {
   }
   defaults = { onboardingComplete: false, displayName: process.env.USERNAME || 'Player', ...(await detectDefaultPaths()), automaticOrganization: true,
     highConfidenceAutoCategorization: false, backupBeforeSwitching: true, keepArchives: false,
-    checkForUpdates: true, launchAfterSwitch: false, theme: 'system', accentTheme: 'lime',
+    checkForUpdates: true, launchAfterSwitch: false, theme: 'system', accentTheme: 'lime', ignoredUncategorizedLocations: [],
     accentColor: '#84d651', accentX: 10, accentY: 24, uiColor: '#1d231f', uiX: 18, uiY: 34, textScale: 1 };
   lastScan = getLastScan(getSettings(defaults).modsFolder);
 

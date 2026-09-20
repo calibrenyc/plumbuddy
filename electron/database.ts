@@ -14,8 +14,9 @@ export function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS mod_files (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL, relative_path TEXT NOT NULL,
       extension TEXT NOT NULL, size INTEGER NOT NULL, modified_at TEXT NOT NULL, hash TEXT NOT NULL,
-      category TEXT NOT NULL, enabled INTEGER NOT NULL, duplicate INTEGER NOT NULL, depth_issue INTEGER NOT NULL,
+    category TEXT NOT NULL, enabled INTEGER NOT NULL, duplicate INTEGER NOT NULL, depth_issue INTEGER NOT NULL,
       recommended_location TEXT, category_mismatch INTEGER NOT NULL DEFAULT 0,
+      ignored_location INTEGER NOT NULL DEFAULT 0,
       scan_id TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_mod_files_hash ON mod_files(hash);
@@ -38,6 +39,7 @@ export function initializeDatabase() {
   const columns = new Set((db.prepare('PRAGMA table_info(mod_files)').all() as { name: string }[]).map(column => column.name));
   if (!columns.has('recommended_location')) db.exec('ALTER TABLE mod_files ADD COLUMN recommended_location TEXT');
   if (!columns.has('category_mismatch')) db.exec('ALTER TABLE mod_files ADD COLUMN category_mismatch INTEGER NOT NULL DEFAULT 0');
+  if (!columns.has('ignored_location')) db.exec('ALTER TABLE mod_files ADD COLUMN ignored_location INTEGER NOT NULL DEFAULT 0');
   const packColumns = new Set((db.prepare('PRAGMA table_info(mod_packs)').all() as { name: string }[]).map(column => column.name));
   if (!packColumns.has('updated_at')) db.exec('ALTER TABLE mod_packs ADD COLUMN updated_at TEXT');
   if (!packColumns.has('version')) db.exec('ALTER TABLE mod_packs ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
@@ -64,15 +66,15 @@ export function saveSettings(defaults: AppSettings, update: Partial<AppSettings>
 export function saveScan(result: ScanResult, folderPath: string) {
   const scanId = result.scannedAt;
   const insert = db.prepare(`INSERT INTO mod_files
-    (id,name,path,relative_path,extension,size,modified_at,hash,category,enabled,duplicate,depth_issue,recommended_location,category_mismatch,scan_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    (id,name,path,relative_path,extension,size,modified_at,hash,category,enabled,duplicate,depth_issue,recommended_location,category_mismatch,ignored_location,scan_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   db.exec('BEGIN IMMEDIATE');
   try {
     db.exec('DELETE FROM mod_files');
     for (const file of result.files) {
       insert.run(file.id, file.name, file.path, file.relativePath, file.extension, file.size,
         file.modifiedAt, file.hash, file.category, Number(file.enabled), Number(file.duplicate),
-        Number(file.depthIssue), file.recommendedLocation, Number(file.categoryMismatch), scanId);
+        Number(file.depthIssue), file.recommendedLocation, Number(file.categoryMismatch), Number(file.ignoredLocation), scanId);
     }
     db.prepare('INSERT OR REPLACE INTO scan_state (id, folder_path, scanned_at) VALUES (1, ?, ?)').run(path.resolve(folderPath), scanId);
     db.exec('COMMIT');
@@ -94,13 +96,14 @@ export function getLastScan(folderPath?: string): ScanResult | null {
     hash: row.hash as string, category: row.category as ModFile['category'], enabled: Boolean(row.enabled),
     recommendedLocation: row.recommended_location as string | null,
     categoryMismatch: Boolean(row.category_mismatch),
+    ignoredLocation: Boolean(row.ignored_location),
     duplicate: Boolean(row.duplicate), depthIssue: Boolean(row.depth_issue),
   }));
   return {
     files, totalSize: files.reduce((sum, file) => sum + file.size, 0),
     duplicateGroups: new Set(files.filter(file => file.duplicate).map(file => file.hash)).size,
     depthIssues: files.filter(file => file.depthIssue).length,
-    uncategorized: files.filter(file => file.category === 'Uncategorized').length,
+    uncategorized: files.filter(file => file.category === 'Uncategorized' && !file.ignoredLocation).length,
     scannedAt: state?.scanned_at ?? rows[0].scan_id as string,
   };
 }

@@ -1,7 +1,7 @@
 {
-  "name": "plumbuddy-mod-manager",
-  "version": "1.0.5",
-  "productName": "Plumbuddy",
+  "name": "balance-mod-manager",
+  "version": "2.0.0",
+  "productName": "Balance",
   "private": true,
   "description": "A safe, friendly mod manager for The Sims 4",
   "type": "commonjs",
@@ -40,8 +40,8 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.plumbuddy.modmanager",
-    "productName": "Plumbuddy",
+    "appId": "com.balance.modmanager",
+    "productName": "Balance",
     "directories": {
       "output": "dist-portable"
     },
@@ -63,10 +63,10 @@
           ]
         }
       ],
-      "artifactName": "Plumbuddy.${ext}"
+      "artifactName": "Balance.${ext}"
     },
     "portable": {
-      "artifactName": "Plumbuddy.${ext}"
+      "artifactName": "Balance.${ext}"
     }
   }
 }

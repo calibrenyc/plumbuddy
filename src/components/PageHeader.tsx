@@ -46,7 +46,7 @@ export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?:
       <div className="header-actions">{actions}<button className="icon-button" aria-label="Search" onClick={() => setSearchOpen(true)}><Search size={19} /></button><button className={`icon-button notification ${appUpdate?.updateAvailable ? 'has-update' : ''}`} aria-label="Notifications" onClick={() => setNotificationsOpen(true)}><Bell size={19} />{appUpdate?.updateAvailable && <span />}</button></div>
     </header>
 
-    {searchOpen && <Modal title="Search Plumbuddy" subtitle="Jump directly to a part of your collection." onClose={() => setSearchOpen(false)}>
+    {searchOpen && <Modal title="Search Balance" subtitle="Jump directly to a part of your collection." onClose={() => setSearchOpen(false)}>
       <div className="modal-search"><Search size={18} /><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search pages and tools..." /></div>
       <div className="search-results">{results.map(({ label, detail, page, icon: Icon }) => <button key={page} onClick={() => navigate(page)}><Icon size={17} /><span><strong>{label}</strong><small>{detail}</small></span></button>)}{!results.length && <p>No matching tools found.</p>}</div>
     </Modal>}

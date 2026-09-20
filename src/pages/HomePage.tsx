@@ -23,13 +23,6 @@ export function HomePage({ onNavigate }: { onNavigate(page: PageId): void }) {
   const modCount = scan?.files.length ?? 0;
   const totalSize = scan?.totalSize ?? 0;
   const activePack = packs[0];
-  const quickActions = [
-    { icon: PackagePlus, title: 'Create Mod Pack', detail: 'From your current mods', tone: 'lime', action: () => setPackModal(true) },
-    { icon: CloudDownload, title: 'Install Mod', detail: 'From a link or file', tone: 'purple', action: () => onNavigate('discover') },
-    { icon: FolderSync, title: 'Import Mod Pack', detail: 'Join with a pack code', tone: 'blue', action: () => onNavigate('packs') },
-    { icon: Archive, title: 'Create Backup', detail: 'A safe ZIP archive', tone: 'orange', action: runBackup },
-    { icon: ScanSearch, title: 'Scan Mods', detail: 'Check for issues', tone: 'rose', action: runScan },
-  ];
   const activityRows = (limit?: number) => activities.slice(0, limit).map(activity => {
     const appearance = activityAppearance[activity.type];
     const Icon = appearance.icon;
@@ -44,7 +37,6 @@ export function HomePage({ onNavigate }: { onNavigate(page: PageId): void }) {
       <div className="hero-copy"><span className="status-pill"><span /> START YOUR COLLECTION</span><h2>No mod pack yet</h2><p className="empty-pack-copy">Discover new mods or turn the {modCount ? `${modCount} files already in your Mods folder` : 'mods in your folder'} into your first organized pack.</p><div className="hero-actions"><button className="button primary" onClick={() => onNavigate('discover')}><CloudDownload size={17} /> Find new mods</button><button className="button glass" onClick={() => setPackModal(true)}><PackagePlus size={16} /> Create a mod pack</button></div></div>
       <div className="hero-art empty-art" aria-hidden="true"><div className="hero-orbit orbit-one" /><div className="plumbob muted"><span className="plumbob-top" /><span className="plumbob-bottom" /></div><div className="floating-chip chip-two"><Sparkles size={16} /> Ready when you are</div></div>
     </section>}
-    <section className="section-block"><div className="section-heading"><div><h2>Quick actions</h2><p>What would you like to do?</p></div></div><div className="quick-grid">{quickActions.map(({ icon: Icon, title, detail, tone, action }) => <button className="quick-card" key={title} onClick={action}><span className={`quick-icon ${tone}`}><Icon size={21} /></span><span><strong>{title}</strong><small>{detail}</small></span><ArrowRight className="quick-arrow" size={17} /></button>)}</div></section>
     <div className="home-columns"><section className="section-block activity-section"><div className="section-heading"><div><h2>Recent activity</h2><p>Real changes made through Plumbuddy</p></div>{activities.length > 4 && <button className="text-button" onClick={() => setActivityModal(true)}>View all</button>}</div>
       {activities.length ? <div className="activity-list">{activityRows(4)}</div> : <div className="activity-list empty-activity"><RefreshCw size={20} /><div><strong>No activity yet</strong><small>Scans, downloads, backups, pack creation, and organization changes will appear here.</small></div></div>}
     </section><section className="tip-card"><span className="tip-kicker"><Sparkles size={14} /> PLUMBUDDY TIP</span><h3>Play together, worry-free.</h3><p>Create a mod pack to compare your setup with friends before multiplayer.</p><button onClick={() => onNavigate('packs')}>Explore multiplayer sync <ArrowRight size={15} /></button><div className="tip-gems"><i /><i /><i /></div></section></div>

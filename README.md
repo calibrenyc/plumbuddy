@@ -1,4 +1,4 @@
-# Plumbuddy
+# Balance
 
 A safety-first desktop mod manager for The Sims 4, built with Electron, React, TypeScript, and SQLite.
 

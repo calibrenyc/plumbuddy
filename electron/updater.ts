@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import type { AppReleaseInfo, AppUpdateInfo, AppUpdateInstallResult } from '../src/types.js';
 
-const repository = 'calibrenyc/plumbuddy';
+const repository = 'calibrenyc/balance';
 
 interface GitHubRelease {
   tag_name?: string;

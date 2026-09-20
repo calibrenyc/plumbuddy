@@ -11,6 +11,7 @@ const defaults: AppSettings = {
   appInstallFolder: `C:\\Users\\${user}\\Documents\\Plumbuddy\\Application`,
   automaticOrganization: true,
   highConfidenceAutoCategorization: false,
+  ignoredUncategorizedLocations: [],
   backupBeforeSwitching: true,
   keepArchives: false,
   checkForUpdates: true,
