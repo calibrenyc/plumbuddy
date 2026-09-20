@@ -40,7 +40,7 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.balance.modmanager",
+    "appId": "com.plumbuddy.modmanager",
     "productName": "Balance",
     "directories": {
       "output": "dist-portable"
