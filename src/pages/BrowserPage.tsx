@@ -150,7 +150,10 @@ export function BrowserPage() {
     const readBounds = () => {
       const box = viewportRef.current?.getBoundingClientRect();
       if (!box) return null;
-      return { x: box.left, y: box.top, width: box.width, height: box.height, scaleFactor: window.devicePixelRatio || 1 };
+      // BrowserView bounds and getBoundingClientRect() both use Electron DIP.
+      // Do not apply devicePixelRatio here: doing so shrinks the native view on
+      // scaled Windows displays and leaves uncovered blank space.
+      return { x: box.left, y: box.top, width: box.width, height: box.height };
     };
     const syncBounds = () => {
       const bounds = readBounds();

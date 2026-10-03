@@ -15,6 +15,10 @@ import { findEmptyFolders, removeEmptyFolders } from './emptyFolders.js';
 import { installBulkZip, prepareBulkZip, prepareBulkZipFile, prepareBulkZipFiles } from './bulkInstaller.js';
 import { checkAppUpdates, downloadAndInstallAppUpdate, listAppReleases } from './updater.js';
 
+// Keep the user-data directory stable across the Balance rebrand. This must run
+// before Electron is ready, when it resolves the default userData path.
+app.setName('Plumbuddy');
+
 const currentDir = __dirname;
 let defaults: AppSettings;
 let lastScan: ScanResult | null = null;
@@ -94,22 +98,15 @@ function hideBrowserView() {
   if (browserView && mainWindow) mainWindow.removeBrowserView(browserView);
 }
 
-function clampBrowserBounds(bounds: { x: number; y: number; width: number; height: number; scaleFactor?: number }) {
+function clampBrowserBounds(bounds: { x: number; y: number; width: number; height: number }) {
   const windowBounds = mainWindow?.getContentBounds();
   const maxWidth = windowBounds?.width ?? 1440;
   const maxHeight = windowBounds?.height ?? 920;
-  const scaleFactor = bounds.scaleFactor && bounds.scaleFactor > 0 ? bounds.scaleFactor : 1;
-  const scaled = {
-    x: bounds.x / scaleFactor,
-    y: bounds.y / scaleFactor,
-    width: bounds.width / scaleFactor,
-    height: bounds.height / scaleFactor,
-  };
-  const measuredBadly = scaled.width < 160 || scaled.height < 160 || scaled.x < 0 || scaled.y < 42;
-  const x = measuredBadly ? 92 : Math.round(scaled.x);
-  const y = measuredBadly ? 190 : Math.round(scaled.y);
-  const width = Math.max(120, Math.min(Math.round(scaled.width || 0), maxWidth - x));
-  const height = Math.max(120, Math.min(Math.round(scaled.height || 0), maxHeight - y));
+  const measuredBadly = bounds.width < 160 || bounds.height < 160 || bounds.x < 0 || bounds.y < 42;
+  const x = measuredBadly ? 92 : Math.round(bounds.x);
+  const y = measuredBadly ? 190 : Math.round(bounds.y);
+  const width = Math.max(120, Math.min(Math.round(bounds.width || 0), maxWidth - x));
+  const height = Math.max(120, Math.min(Math.round(bounds.height || 0), maxHeight - y));
   const next = { x, y, width, height };
   if (process.env.PLUMBUDDY_CLICK_AUDIT === '1') console.log('[browser-bounds]', { input: bounds, output: next, window: windowBounds });
   return next;
@@ -184,8 +181,6 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // Keep the legacy data directory so Balance upgrades preserve Plumbuddy settings and packs.
-  app.setName('Plumbuddy');
   initializeDatabase();
   configureBrowserSession();
   if (process.env.PLUMBUDDY_CLICK_AUDIT === '1') {

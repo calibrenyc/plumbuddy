@@ -387,7 +387,6 @@ export interface BrowserViewBounds {
   y: number;
   width: number;
   height: number;
-  scaleFactor?: number;
 }
 
 export interface BrowserViewState {
