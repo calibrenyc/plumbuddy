@@ -11,11 +11,14 @@ if ([string]::IsNullOrWhiteSpace($Tag)) {
   $Tag = "v$($package.version)"
 }
 
-npm run build:portable
+npm run build:release
 
-$artifact = Join-Path $projectRoot "dist-portable\Balance-$($package.version)-portable-x64.exe"
-if (!(Test-Path -LiteralPath $artifact)) {
-  throw "Portable artifact was not found: $artifact"
+$portableArtifact = Join-Path $projectRoot "dist-portable\Balance-$($package.version)-portable-x64.exe"
+$installerArtifact = Join-Path $projectRoot "dist-portable\Balance-$($package.version)-setup-x64.exe"
+foreach ($artifact in @($portableArtifact, $installerArtifact)) {
+  if (!(Test-Path -LiteralPath $artifact)) {
+    throw "Release artifact was not found: $artifact"
+  }
 }
 
-gh release create $Tag $artifact --title "Balance $Tag" --notes "Portable Balance release $Tag"
+gh release create $Tag $portableArtifact $installerArtifact --title "Balance $Tag" --notes "Windows portable and setup release $Tag"

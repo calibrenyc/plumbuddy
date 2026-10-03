@@ -25,6 +25,14 @@ function normalizeVersion(value: string) {
   return value.trim().replace(/^v/i, '');
 }
 
+function findUpdateAsset(release: GitHubRelease) {
+  // Keep automatic in-place updates on the portable executable. The NSIS setup
+  // installer is for manual installs and cannot be swapped in as the app EXE.
+  return release.assets?.find(item => /portable.*x64.*\.exe$/i.test(item.name))
+    ?? release.assets?.find(item => /\.exe$/i.test(item.name))
+    ?? null;
+}
+
 function compareVersions(left: string, right: string) {
   const a = normalizeVersion(left).split(/[.-]/).map(part => Number.parseInt(part, 10) || 0);
   const b = normalizeVersion(right).split(/[.-]/).map(part => Number.parseInt(part, 10) || 0);
@@ -50,7 +58,7 @@ export async function checkAppUpdates(): Promise<AppUpdateInfo> {
   if (!response.ok) throw new Error(`GitHub update check failed: ${response.status}`);
   const release = await response.json() as GitHubRelease;
   const latestVersion = normalizeVersion(release.tag_name || currentVersion);
-  const asset = release.assets?.find(item => /portable.*x64.*\.exe$/i.test(item.name) || /\.exe$/i.test(item.name)) ?? null;
+  const asset = findUpdateAsset(release);
   return {
     currentVersion,
     latestVersion,
@@ -66,7 +74,7 @@ export async function checkAppUpdates(): Promise<AppUpdateInfo> {
 
 function releaseToInfo(release: GitHubRelease, currentVersion: string): AppReleaseInfo {
   const version = normalizeVersion(release.tag_name || currentVersion);
-  const asset = release.assets?.find(item => /portable.*x64.*\.exe$/i.test(item.name) || /\.exe$/i.test(item.name)) ?? null;
+  const asset = findUpdateAsset(release);
   return {
     version,
     name: release.name || `v${version}`,
